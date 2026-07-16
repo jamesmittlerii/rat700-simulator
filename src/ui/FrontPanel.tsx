@@ -697,7 +697,9 @@ function PatchBay({
               />
             )
           })}
-          {/* Jumper blocks */}
+          {/* Jumper blocks — mode4 is a 4-pin Umschaltstecker spanning both
+              strip columns × two rows; time2 is a 2-pin shorting plug on the
+              left config column only. */}
           {machine.jumpers.map((j) => {
             const block = SWITCHABLE_BLOCKS.find((b) => b.ampSlot === j.ampSlot)
             if (!block) return null
@@ -707,14 +709,15 @@ function PatchBay({
             const col = block.cols[0] - 1
             const y = Math.min(row0, row1)
             const h = Math.abs(row1 - row0) + 1
+            const wide = j.kind === 'mode4'
             return (
               <rect
                 key={j.id}
-                x={col + 0.15}
-                y={y + 0.15}
-                width={0.7}
-                height={h - 0.3}
-                rx={0.1}
+                x={col + 0.12}
+                y={y + 0.12}
+                width={wide ? 1.76 : 0.76}
+                height={h - 0.24}
+                rx={0.12}
                 className={`fp-jumper-block kind-${j.kind}`}
               />
             )

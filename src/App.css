@@ -765,8 +765,8 @@ button.fp-jack:hover {
 }
 
 .fp-jack.color-orange {
-  /* Terracotta mult columns (museum) */
-  background: radial-gradient(circle at 35% 30%, #c48a5a, #8a5530 72%);
+  /* Brick-orange mult columns (museum photo) */
+  background: radial-gradient(circle at 35% 30%, #e0954f, #b3591f 72%);
 }
 
 .fp-jack.color-green {
@@ -794,8 +794,8 @@ button.fp-jack:hover {
 }
 
 .fp-jack.color-brown {
-  /* Relays / ME-adjacent */
-  background: radial-gradient(circle at 35% 30%, #9a7060, #5a3830 72%);
+  /* Komparator-Relais — light brown (manual §3.7.1) */
+  background: radial-gradient(circle at 35% 30%, #c4a078, #8a6840 72%);
 }
 
 .fp-jack.color-pink {

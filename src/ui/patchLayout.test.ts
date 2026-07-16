@@ -8,6 +8,7 @@ import {
   AMP_STRIPS,
   COMPARATOR_BLOCKS,
   FREE_DIODE_BLOCKS,
+  MULTIPLIER_BANKS,
   buildPatchLayout,
   findPortCell,
   isLegalModeJumper,
@@ -61,8 +62,8 @@ describe('patch layout', () => {
     const refP = findPortCell(cells, { nodeId: 'ref_p10', port: 'out' })
     expect(int1Out?.color).toBe('red')
     expect(potIn?.color).toBe('green')
-    // +10 V reference surfaces on the +ME metering jacks (orange on museum panel)
-    expect(refP?.color).toBe('orange')
+    // +10 V reference surfaces on the +ME metering jacks (red per manual).
+    expect(refP?.color).toBe('red')
 
     for (const cable of m.cables) {
       expect(findPortCell(cells, cable.from)).toBeTruthy()
@@ -234,21 +235,44 @@ describe('patch layout', () => {
   })
 
   it('paints freie Dioden blocks yellow on rows l–o', () => {
-    const cells = buildPatchLayout(loadHarmonicOscillator().nodes)
+    const cells = buildPatchLayout(loadVehicleSuspension('firm').nodes)
     for (const block of FREE_DIODE_BLOCKS) {
       for (const col1 of block.cols) {
         for (const letter of block.rows) {
           const row = rowIndex(letter)
           const cell = cells.find((c) => c.col === col1 - 1 && c.row === row)
           expect(cell).toBeTruthy()
-          if (!cell?.ref) expect(cell?.color).toBe('yellow')
+          expect(cell?.color).toBe('yellow')
+          expect(cell?.ref).toBeUndefined()
         }
       }
     }
   })
 
-  it('paints Komparator-Relais orange on row p (cols 7–11 and 20–24)', () => {
-    const cells = buildPatchLayout(loadHarmonicOscillator().nodes)
+  it('paints Multiplikator banks as paired green inputs, red outs, white G', () => {
+    const cells = buildPatchLayout(loadVehicleSuspension('firm').nodes)
+    for (const bank of MULTIPLIER_BANKS) {
+      const [c0, c1, c2] = bank.cols
+      for (const col1 of [c0, c1]) {
+        for (const row of [0, 1, 2, 3]) {
+          expect(
+            cells.find((c) => c.col === col1 - 1 && c.row === row)?.color,
+          ).toBe('green')
+        }
+      }
+      for (const row of [0, 1, 2]) {
+        expect(cells.find((c) => c.col === c2 - 1 && c.row === row)?.color).toBe(
+          'red',
+        )
+      }
+      expect(cells.find((c) => c.col === c2 - 1 && c.row === 3)?.color).toBe(
+        'white',
+      )
+    }
+  })
+
+  it('paints Komparator-Relais brown on row p (cols 7–11 and 20–24)', () => {
+    const cells = buildPatchLayout(loadVehicleSuspension('firm').nodes)
     expect(COMPARATOR_BLOCKS.map((b) => [...b.cols])).toEqual([
       [7, 8, 9, 10, 11],
       [20, 21, 22, 23, 24],
@@ -259,19 +283,18 @@ describe('patch layout', () => {
       for (const col1 of block.cols) {
         const cell = cells.find((c) => c.col === col1 - 1 && c.row === row)
         expect(cell).toBeTruthy()
-        if (!cell?.ref) {
-          expect(cell?.color).toBe('orange')
-          expect(cell?.label).toBe(block.id)
-        }
+        expect(cell?.color).toBe('brown')
+        expect(cell?.label).toBe(block.id)
+        expect(cell?.ref).toBeUndefined()
       }
     }
   })
 
-  it('paints +ME row n orange and −ME row o blue', () => {
+  it('paints +ME row n red and −ME row o blue', () => {
     const cells = buildPatchLayout(loadHarmonicOscillator().nodes)
     const nRow = rowIndex('n')
     const oRow = rowIndex('o')
-    const plus = cells.find((c) => c.row === nRow && c.color === 'orange' && c.ref)
+    const plus = cells.find((c) => c.row === nRow && c.color === 'red' && c.ref)
     const minus = cells.find((c) => c.row === oRow && c.color === 'blue' && c.ref)
     expect(plus?.label).toBe('+ME')
     expect(minus?.label).toBe('−ME')

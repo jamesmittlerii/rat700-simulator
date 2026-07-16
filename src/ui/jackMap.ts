@@ -156,8 +156,58 @@ export const FREE_DIODE_BLOCKS = [
   { cols: [23, 24] as const, rows: ['l', 'm', 'n', 'o'] as const },
 ] as const
 
+/** True when a 1-based column / row index is inside a freie Dioden field. */
+export function isFreeDiodeCell(col1: number, row: number): boolean {
+  const letter = rowLetter(row)
+  for (const block of FREE_DIODE_BLOCKS) {
+    if (!(block.rows as readonly RowLetter[]).includes(letter)) continue
+    if ((block.cols as readonly number[]).includes(col1)) return true
+  }
+  return false
+}
+
+/** True when rows l/m are entirely freie Dioden on both strip columns. */
+export function diodeBlocksAmpTray(leftCol: number, rightCol: number): boolean {
+  for (const letter of ['l', 'm'] as const) {
+    const row = rowIndex(letter)
+    if (!isFreeDiodeCell(leftCol, row) || !isFreeDiodeCell(rightCol, row)) {
+      return false
+    }
+  }
+  return true
+}
+
+/** Rows for amp tray (IC/R/G/Out), preferring museum l/m but skipping diode fields. */
+export function ampTrayRows(leftCol: number, rightCol: number): {
+  aux: number
+  out: number
+  split: boolean
+} {
+  if (diodeBlocksAmpTray(leftCol, rightCol)) {
+    const row = rowIndex('k')
+    return { aux: row, out: row, split: true }
+  }
+  const candidates = [rowIndex('m'), rowIndex('l'), rowIndex('k'), rowIndex('i')]
+  const pairFree = (row: number) =>
+    !isFreeDiodeCell(leftCol, row) && !isFreeDiodeCell(rightCol, row)
+  const out =
+    candidates.find(pairFree) ??
+    rowIndex('k')
+  const aux =
+    [rowIndex('l'), rowIndex('k'), rowIndex('i')].find(pairFree) ?? out
+  const split =
+    diodeBlocksAmpTray(leftCol, rightCol) || !pairFree(rowIndex('m'))
+  return { aux, out, split: split || out === rowIndex('k') }
+}
+
+export function freeDiodeLabel(letter: RowLetter): string {
+  if (letter === 'l') return 'freie Diode'
+  if (letter === 'm' || letter === 'o') return 'D A'
+  return 'D K'
+}
+
 /**
- * Komparator-Relais — orange jack fields on row p (silk diagram).
+ * Komparator-Relais — light brown jack fields on row p (manual §3.7.1).
  * Left block K1 cols 7–11; right block K2 cols 20–24.
  */
 export const COMPARATOR_BLOCKS = [
@@ -167,8 +217,8 @@ export const COMPARATOR_BLOCKS = [
 
 /**
  * Reference Machine Units & Metering (§3.7 grid; rows n/o).
- * +ME (+10 V) on row n = orange, −ME (−10 V) on row o = blue
- * (museum panel photo). Grouped over the pot blocks.
+ * +ME (+10 V) on row n = red, −ME (−10 V) on row o = blue
+ * (manual §3.7.1). Grouped over the pot blocks.
  */
 export const ME_COLS = [2, 3, 4, 10, 11, 12, 19, 20, 21, 27, 28, 29] as const
 
