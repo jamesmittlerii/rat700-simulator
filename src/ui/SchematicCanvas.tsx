@@ -5,12 +5,14 @@ import type { PortRef } from '../engine/types'
 import { portKey } from '../engine/types'
 
 const JACK_COLORS: Record<string, string> = {
-  green: '#3d7a4a',
-  orange: '#c4782a',
-  red: '#b33a3a',
+  green: '#2e6a3c',
+  orange: '#d88838',
+  red: '#c04038',
   blue: '#3a5fb3',
   black: '#2a2a2a',
-  yellow: '#c4a832',
+  yellow: '#d4b028',
+  white: '#e8e4d8',
+  brown: '#6b4428',
 }
 
 const NODE_W = 140

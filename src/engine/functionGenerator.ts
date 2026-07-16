@@ -1,6 +1,68 @@
 import type { Breakpoint } from './types'
+import { MACHINE_UNIT } from './types'
 
 export type { Breakpoint }
+
+/**
+ * RAT 700 variable FG (§3.4): 20 straight-line segments with equidistant
+ * abscissa breakpoints → 21 adjusting potentiometers spanning ±E.
+ */
+export const FG_SEGMENT_COUNT = 20
+export const FG_KNOB_COUNT = FG_SEGMENT_COUNT + 1
+
+/** Abscissa for knob index 0…20 over the machine unit (−10 … +10 V). */
+export function equidistantX(index: number): number {
+  const i = Math.max(0, Math.min(FG_KNOB_COUNT - 1, index))
+  return (
+    -MACHINE_UNIT +
+    (i / (FG_KNOB_COUNT - 1)) * (2 * MACHINE_UNIT)
+  )
+}
+
+/** Default FG: identity f(x) = x on the 21 equidistant knots. */
+export function defaultFgBreakpoints(): Breakpoint[] {
+  return Array.from({ length: FG_KNOB_COUNT }, (_, i) => {
+    const x = equidistantX(i)
+    return { x, y: x }
+  })
+}
+
+/** Zero function (all knobs at mid-scale). */
+export function zeroFgBreakpoints(): Breakpoint[] {
+  return Array.from({ length: FG_KNOB_COUNT }, (_, i) => ({
+    x: equidistantX(i),
+    y: 0,
+  }))
+}
+
+/**
+ * Resample any breakpoint polyline onto the museum 21-knob equidistant grid.
+ * Used so the faceplate knobs always map 1:1 to −10…+10.
+ */
+export function toEquidistantBreakpoints(
+  breakpoints: Breakpoint[],
+): Breakpoint[] {
+  return Array.from({ length: FG_KNOB_COUNT }, (_, i) => {
+    const x = equidistantX(i)
+    return {
+      x,
+      y: functionGeneratorOutput(x, breakpoints.length ? breakpoints : zeroFgBreakpoints()),
+    }
+  })
+}
+
+/** Set one knobs's ordinate (clamped to ±E) and return a full 21-point table. */
+export function setEquidistantY(
+  breakpoints: Breakpoint[],
+  index: number,
+  y: number,
+): Breakpoint[] {
+  const pts = toEquidistantBreakpoints(breakpoints)
+  const i = Math.max(0, Math.min(FG_KNOB_COUNT - 1, index))
+  const clamped = Math.max(-MACHINE_UNIT, Math.min(MACHINE_UNIT, y))
+  pts[i] = { x: equidistantX(i), y: clamped }
+  return pts
+}
 
 /** Evaluate sorted breakpoints with linear interpolation and end hold. */
 export function functionGeneratorOutput(

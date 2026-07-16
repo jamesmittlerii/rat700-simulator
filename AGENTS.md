@@ -1,10 +1,10 @@
 # RAT 700 Simulator
 
-Browser-based analog computer simulator (Telefunken RAT 700, 1961). Client-side React + Vite + TypeScript SPA. No backend, database, or external services; patches persist to browser `localStorage`.
+Browser-based Telefunken RAT 700 analog computer simulator (v2 museum faceplate). Client-side React 19 + Vite + TypeScript SPA. No backend; patches persist to `localStorage` (`rat700-patch-v2`).
 
 ## Cursor Cloud specific instructions
 
-- Single service. All standard commands are in `package.json` scripts: `npm run dev` (Vite dev server on port 5173), `npm test` (Vitest, one-shot), `npm run lint` (oxlint), `npm run build` (`tsc -b && vite build`).
-- Tests run in Node (`environment: 'node'` in `vite.config.ts`) — the engine under `src/engine/` is pure TS, so no browser is needed for automated tests.
-- For manual/E2E testing, run `npm run dev` and open `http://localhost:5173`, load a preset (e.g. Harmonic oscillator or Vehicle), then click **Operate** to see the X/Y scope animate.
+- Single service. Scripts: `npm run dev` (Vite on 5173), `npm test` (Vitest), `npm run lint` (oxlint), `npm run build` (`tsc -b && vite build`).
+- Engine under `src/engine/` is pure TS (no React). Vitest uses `environment: 'node'`.
+- Manual check: `npm run dev` → Front panel → load Harmonic oscillator → **Dauerrechnen** → XY orbit on the faceplate scope.
 - No `.env`, secrets, or auth required.
