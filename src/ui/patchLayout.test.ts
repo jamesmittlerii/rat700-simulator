@@ -9,10 +9,12 @@ import {
   COMPARATOR_BLOCKS,
   FREE_DIODE_BLOCKS,
   MULTIPLIER_BANKS,
+  SWITCHABLE_BLOCKS,
   buildPatchLayout,
   findPortCell,
   isLegalModeJumper,
   isLegalTimeJumper,
+  jumperOccupiedJacks,
   PATCH_COLS,
   PATCH_ROWS,
   POT_COLS,
@@ -30,6 +32,22 @@ describe('jack map legality', () => {
     expect(isLegalModeJumper(5, 'sigma')).toBe(false)
     expect(isLegalTimeJumper(1, '1')).toBe(true)
     expect(isLegalTimeJumper(1, '10')).toBe(true)
+  })
+
+  it('keeps mode4 and time2 from sharing jacks (e.g. c21)', () => {
+    const block = SWITCHABLE_BLOCKS.find((b) => b.cols[0] === 21)!
+    const [left, right] = block.cols
+    for (const modePos of ['sigma', 'integral'] as const) {
+      for (const timePos of ['1', '10'] as const) {
+        const modeJacks = jumperOccupiedJacks('mode4', modePos, left, right)
+        const timeJacks = jumperOccupiedJacks('time2', timePos, left, right)
+        for (const m of modeJacks) {
+          expect(
+            timeJacks.some((t) => t.col1 === m.col1 && t.row === m.row),
+          ).toBe(false)
+        }
+      }
+    }
   })
 
   it('defines 15 two-column amp strips', () => {
@@ -60,7 +78,9 @@ describe('patch layout', () => {
     const int1Out = findPortCell(cells, { nodeId: 'int_1', port: 'out' })
     const potIn = findPortCell(cells, { nodeId: 'pot_1', port: 'in' })
     const refP = findPortCell(cells, { nodeId: 'ref_p10', port: 'out' })
-    expect(int1Out?.color).toBe('red')
+    // Amp outs live on the right-column mult band (white e–f / orange g–k).
+    expect(int1Out?.ref?.port).toBe('out')
+    expect(['white', 'orange', 'red']).toContain(int1Out?.color)
     expect(potIn?.color).toBe('green')
     // +10 V reference surfaces on the +ME metering jacks (red per manual).
     expect(refP?.color).toBe('red')
@@ -71,7 +91,7 @@ describe('patch layout', () => {
     }
   })
 
-  it('pairs green inputs with white e–f mults and orange g–k mults', () => {
+  it('keeps left-column inputs independent from right-column output mults', () => {
     const m = loadHarmonicOscillator()
     const cells = buildPatchLayout(m.nodes)
     // Amp 01 = cols 1–2 (0-based 0–1), switchable e–k
@@ -84,15 +104,18 @@ describe('patch layout', () => {
         c.ref,
     )
     expect(eLeft).toBeTruthy()
+    expect(eLeft!.ref?.port).toBe('in0')
     const eRight = cells.find(
       (c) =>
         c.ampNumber === 1 &&
         c.col === 1 &&
         c.row === 4 &&
-        c.color === 'white',
+        c.color === 'white' &&
+        c.ref,
     )
     expect(eRight).toBeTruthy()
-    expect(eRight!.ref).toEqual(eLeft!.ref)
+    expect(eRight!.ref?.port).toBe('out')
+    expect(eRight!.ref).not.toEqual(eLeft!.ref)
 
     const gLeft = cells.find(
       (c) =>
@@ -108,10 +131,12 @@ describe('patch layout', () => {
         c.ampNumber === 1 &&
         c.col === 1 &&
         c.row === 6 &&
-        c.color === 'orange',
+        c.color === 'orange' &&
+        c.ref,
     )
     expect(gRight).toBeTruthy()
-    expect(gRight!.ref).toEqual(gLeft!.ref)
+    expect(gRight!.ref?.port).toBe('out')
+    expect(gRight!.ref).not.toEqual(gLeft!.ref)
   })
 
   it('paints rows e–f as green|white across every amp strip', () => {
@@ -290,14 +315,34 @@ describe('patch layout', () => {
     }
   })
 
-  it('paints +ME row n red and −ME row o blue', () => {
+  it('paints the full Masse section black on p12–p19 and stubs o13/o18', () => {
+    const cells = buildPatchLayout(loadVehicleSuspension('firm').nodes)
+    const p = rowIndex('p')
+    const o = rowIndex('o')
+    for (let col1 = 12; col1 <= 19; col1++) {
+      const cell = cells.find((c) => c.col === col1 - 1 && c.row === p)
+      expect(cell?.color).toBe('black')
+      expect(cell?.label).toBe('Masse')
+    }
+    for (const col1 of [13, 18]) {
+      const cell = cells.find((c) => c.col === col1 - 1 && c.row === o)
+      expect(cell?.color).toBe('black')
+      expect(cell?.label).toBe('Masse')
+    }
+  })
+
+  it('paints +ME row n red and −ME row o blue across ME sections', () => {
     const cells = buildPatchLayout(loadHarmonicOscillator().nodes)
     const nRow = rowIndex('n')
     const oRow = rowIndex('o')
-    const plus = cells.find((c) => c.row === nRow && c.color === 'red' && c.ref)
-    const minus = cells.find((c) => c.row === oRow && c.color === 'blue' && c.ref)
-    expect(plus?.label).toBe('+ME')
-    expect(minus?.label).toBe('−ME')
+    for (const col1 of [9, 10, 11, 12, 19, 20, 21, 22]) {
+      const plus = cells.find((c) => c.col === col1 - 1 && c.row === nRow)
+      const minus = cells.find((c) => c.col === col1 - 1 && c.row === oRow)
+      expect(plus?.color).toBe('red')
+      expect(plus?.label).toBe('+ME')
+      expect(minus?.color).toBe('blue')
+      expect(minus?.label).toBe('−ME')
+    }
   })
 
   it('keeps switchable Σ/∫ config columns (rows a–d) all white', () => {

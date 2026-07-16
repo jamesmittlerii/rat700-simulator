@@ -2,8 +2,8 @@
  * Authentic RAT 700 Programmierfeld coordinates.
  * Columns 1–30, rows a–p omitting j (15 rows).
  *
- * Amp strips are 2 columns (left = labeled inputs, right = parallel mult).
- * Mult paint: e–f white; g–k terracotta orange (museum + silk diagram).
+ * Amp strips are 2 columns: left = labeled gain inputs (green);
+ * right = paralleled amp-output mults (white e–f / orange g–k).
  */
 
 export const PATCH_COLS = 30
@@ -148,13 +148,39 @@ export const UNGROUNDED_POT_NUMBERS = [5, 10, 11, 16] as const
 
 /**
  * Freie Dioden — yellow jack fields (silk diagram + §3.5).
- * Each block spans rows l–o; anode/cathode pairs are silk-screened per column.
+ * Each block spans rows l–o. Each column has vertical ties l–m and n–o;
+ * the directional diode symbol is horizontal between adjacent column pairs.
  */
 export const FREE_DIODE_BLOCKS = [
   { cols: [7, 8] as const, rows: ['l', 'm', 'n', 'o'] as const },
   { cols: [14, 15, 16, 17] as const, rows: ['l', 'm', 'n', 'o'] as const },
   { cols: [23, 24] as const, rows: ['l', 'm', 'n', 'o'] as const },
 ] as const
+
+/** Vertical tied jack pairs within each freie-Dioden column. */
+export const FREE_DIODE_VERTICAL_PAIRS: readonly [RowLetter, RowLetter][] = [
+  ['l', 'm'],
+  ['n', 'o'],
+] as const
+
+/** Adjacent column pairs that carry one horizontal diode symbol per vertical pair. */
+export function freeDiodeColPairs(
+  cols: readonly number[],
+): [number, number][] {
+  const pairs: [number, number][] = []
+  for (let i = 0; i + 1 < cols.length; i += 2) {
+    pairs.push([cols[i]!, cols[i + 1]!])
+  }
+  return pairs
+}
+
+/**
+ * Silk diode direction: triangle points toward the cathode bar.
+ * Top pair l–m points right; bottom pair n–o points left.
+ */
+export function freeDiodePairPointsRight(pair: readonly [RowLetter, RowLetter]): boolean {
+  return pair[0] === 'l'
+}
 
 /** True when a 1-based column / row index is inside a freie Dioden field. */
 export function isFreeDiodeCell(col1: number, row: number): boolean {
@@ -202,8 +228,8 @@ export function ampTrayRows(leftCol: number, rightCol: number): {
 
 export function freeDiodeLabel(letter: RowLetter): string {
   if (letter === 'l') return 'freie Diode'
-  if (letter === 'm' || letter === 'o') return 'D A'
-  return 'D K'
+  if (letter === 'n') return 'D K'
+  return 'D A'
 }
 
 /**
@@ -218,9 +244,38 @@ export const COMPARATOR_BLOCKS = [
 /**
  * Reference Machine Units & Metering (§3.7 grid; rows n/o).
  * +ME (+10 V) on row n = red, −ME (−10 V) on row o = blue
- * (manual §3.7.1). Grouped over the pot blocks.
+ * (manual §3.7.1). Grouped under the pot blocks.
  */
-export const ME_COLS = [2, 3, 4, 10, 11, 12, 19, 20, 21, 27, 28, 29] as const
+export const ME_BLOCKS = [
+  { cols: [2, 3, 4] as const },
+  { cols: [9, 10, 11, 12] as const },
+  { cols: [19, 20, 21, 22] as const },
+  { cols: [27, 28, 29] as const },
+] as const
+
+/** Flat column list for +ME/−ME jack paint. */
+export const ME_COLS = ME_BLOCKS.flatMap((b) => [...b.cols]) as [
+  2, 3, 4, 9, 10, 11, 12, 19, 20, 21, 22, 27, 28, 29,
+]
+
+/** Masse ground field on row p (silk §3.5). */
+export const MASSE_P_COLS = [12, 13, 14, 15, 16, 17, 18, 19] as const
+
+/**
+ * Masse stubs on row o that belong to the center Masse section below
+ * (o13 / o18 sit between the ME blocks and join p13 / p18).
+ */
+export const MASSE_O_STUB_COLS = [13, 18] as const
+
+/** Abschaltleitung (AS) overload short — col 1, rows n–o. */
+export const ABSCHALT_COL = 1 as const
+
+/** verfügbar spare fields — row p. */
+export const VERFUEGBAR_LEFT_COLS = [1, 2, 3, 4, 5, 6] as const
+export const VERFUEGBAR_RIGHT_COLS = [25, 26, 27, 28, 29, 30] as const
+
+/** verfügbar utility jacks on the right edge (rows n–o, col 30). */
+export const VERFUEGBAR_EDGE_COL = 30 as const
 
 export function isSwitchableAmp(ampNumber: number): boolean {
   return SWITCHABLE_BLOCKS.some((b) => b.amp === ampNumber)
@@ -253,9 +308,11 @@ export function timeJumperSites(ampSlot: number): {
   const block = SWITCHABLE_BLOCKS.find((b) => b.ampSlot === ampSlot)
   if (!block) return []
   const col = block.cols[0]
+  // Both capacitor plugs sit on row d (horizontal left↔right). Distinct from
+  // the mode 4-pin on a–b / b–c, so ∫ + time never share a jack.
   return [
-    { position: '1', col, rows: ['c', 'd'] },
-    { position: '10', col, rows: ['d', 'e'] },
+    { position: '1', col, rows: ['d', 'd'] },
+    { position: '10', col, rows: ['d', 'd'] },
   ]
 }
 

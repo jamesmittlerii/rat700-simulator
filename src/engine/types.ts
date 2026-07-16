@@ -58,11 +58,13 @@ export interface JumperPlacement {
   kind: JumperKind
   /** Amplifier slot index 0–7 for switchable Σ/∫ blocks. */
   ampSlot: number
-  /**
-   * mode4: 'sigma' = rows a–b (summer), 'integral' = rows b–c (integrator).
-   * time2: '1' = rows c–d, '10' = rows d–e.
-   */
-  position: 'sigma' | 'integral' | '1' | '10'
+/**
+ * mode4: 'sigma' = rows a–b (summer), 'integral' = rows b–c (integrator).
+ * time2: capacitor short on row d (horizontal left↔right). Positions '1' and
+ * '10' share that pair — different plug marking, not different holes — so the
+ * 2-pin never collides with the 4-pin Umschaltstecker.
+ */
+position: 'sigma' | 'integral' | '1' | '10'
 }
 
 export interface AmpConfig {

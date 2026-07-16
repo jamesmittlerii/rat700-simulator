@@ -6,7 +6,7 @@ import {
   potOutput,
 } from './elements'
 import { ampConfigFromJumpers, defaultJumpers, upsertJumper } from './jumpers'
-import { setEquidistantY } from './functionGenerator'
+import { setEquidistantY, zeroFgBreakpoints } from './functionGenerator'
 import { evaluateAlgebraic, rk4Step, type EvalResult } from './solver'
 import { scopeChannelsFor } from '../scope/channels'
 import {
@@ -65,8 +65,12 @@ export function createEmptyMachine(): MachineState {
     createNode('reference', 'ref_p10', '+10 V', 40, 40, { voltage: 10 }),
     createNode('reference', 'ref_m10', '−10 V', 40, 120, { voltage: -10 }),
     createNode('reference', 'ref_gnd', 'Ground', 40, 200, { voltage: 0 }),
-    createNode('functionGenerator', 'fg_1', 'F1', 100, 40),
-    createNode('functionGenerator', 'fg_2', 'F2', 100, 120),
+    createNode('functionGenerator', 'fg_1', 'F1', 100, 40, {
+      breakpoints: zeroFgBreakpoints(),
+    }),
+    createNode('functionGenerator', 'fg_2', 'F2', 100, 120, {
+      breakpoints: zeroFgBreakpoints(),
+    }),
   ]
   const states: Record<string, number> = {}
   const lastEval = evaluateAlgebraic(nodes, [], states, 'ic', 0)
@@ -694,10 +698,23 @@ export function fromSnapshot(snap: CircuitSnapshot): MachineState {
   let nodes = [...snap.nodes]
   const fgCount = nodes.filter((n) => n.kind === 'functionGenerator').length
   if (fgCount === 0) {
-    nodes.push(createNode('functionGenerator', 'fg_1', 'F1', 100, 40))
-    nodes.push(createNode('functionGenerator', 'fg_2', 'F2', 100, 120))
+    nodes.push(
+      createNode('functionGenerator', 'fg_1', 'F1', 100, 40, {
+        breakpoints: zeroFgBreakpoints(),
+      }),
+    )
+    nodes.push(
+      createNode('functionGenerator', 'fg_2', 'F2', 100, 120, {
+        breakpoints: zeroFgBreakpoints(),
+      }),
+    )
   } else if (fgCount === 1) {
-    nodes.push(createNode('functionGenerator', 'fg_2', 'F2', 100, 120))
+    // Unused companion FG stays at mid-scale (zero), not identity.
+    nodes.push(
+      createNode('functionGenerator', 'fg_2', 'F2', 100, 120, {
+        breakpoints: zeroFgBreakpoints(),
+      }),
+    )
   }
 
   const states: Record<string, number> = {}

@@ -19,7 +19,15 @@ import type {
   PortRef,
 } from '../engine/types'
 import { MACHINE_UNIT, portKey } from '../engine/types'
-import { SWITCHABLE_BLOCKS } from './jackMap'
+import {
+  AMP_STRIPS,
+  FREE_DIODE_BLOCKS,
+  FREE_DIODE_VERTICAL_PAIRS,
+  SWITCHABLE_BLOCKS,
+  freeDiodeColPairs,
+  freeDiodePairPointsRight,
+  rowIndex,
+} from './jackMap'
 import {
   PATCH_COLS,
   PATCH_ROWS,
@@ -33,6 +41,7 @@ import {
   jumperRowSpan,
   type PatchCell,
 } from './patchLayout'
+import { buildSilkTies, buildSilkSectionLines } from './silkTies'
 import { XYScope } from './XYScope'
 
 const CABLE_COLORS = ['#c45c26', '#2a6f97', '#2d6a4f', '#7b2d8e', '#b08968']
@@ -122,6 +131,15 @@ export function FrontPanel({
         </button>
       </header>
 
+      {/* Function generators F1 / F2 — 21 knobs each (−10 … +10) */}
+      <FunctionGeneratorField
+        fgs={fgs}
+        powered={machine.powered}
+        selectedId={selectedId}
+        onSelect={onSelect}
+        onFgBreakpoint={onFgBreakpoint}
+      />
+
       {/* A. Potentiometer field */}
       <section className="fp-pots" aria-label="Coefficient potentiometers">
         {Array.from({ length: POT_SLOTS }, (_, i) => {
@@ -159,15 +177,6 @@ export function FrontPanel({
           )
         })}
       </section>
-
-      {/* Function generators F1 / F2 — 21 knobs each (−10 … +10) */}
-      <FunctionGeneratorField
-        fgs={fgs}
-        powered={machine.powered}
-        selectedId={selectedId}
-        onSelect={onSelect}
-        onFgBreakpoint={onFgBreakpoint}
-      />
 
       <div className="fp-main-row">
         {/* B. Patch pad */}
@@ -248,13 +257,9 @@ function FunctionGeneratorField({
   readonly onFgBreakpoint: (nodeId: string, index: number, y: number) => void
 }) {
   const scaleLabels = useMemo(() => {
-    // Show −10 … +10 under the 21 knobs (every other label to avoid clutter)
-    return Array.from({ length: FG_KNOB_COUNT }, (_, i) => {
-      const x = equidistantX(i)
-      if (i === 0 || i === 10 || i === 20) return String(Math.round(x))
-      if (i % 2 === 0) return String(Math.round(x))
-      return ''
-    })
+    return Array.from({ length: FG_KNOB_COUNT }, (_, i) =>
+      String(Math.round(equidistantX(i))),
+    )
   }, [])
 
   return (
@@ -268,7 +273,8 @@ function FunctionGeneratorField({
         ))}
       </div>
       {(['F1', 'F2'] as const).map((name, row) => {
-        const fg = fgs[row]
+        const fg =
+          fgs.find((n) => n.id === `fg_${row + 1}`) ?? fgs[row]
         const pts = toEquidistantBreakpoints(fg?.breakpoints ?? [])
         const selected = fg?.id === selectedId
         return (
@@ -505,6 +511,8 @@ function PatchBay({
   onAutoShutdown: (on: boolean) => void
 }) {
   const cells = useMemo(() => buildPatchLayout(machine.nodes), [machine.nodes])
+  const silkTies = useMemo(() => buildSilkTies(), [])
+  const silkSections = useMemo(() => buildSilkSectionLines(), [])
   const bayRef = useRef<HTMLDivElement>(null)
   const [dragFrom, setDragFrom] = useState<PortRef | null>(null)
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
@@ -636,12 +644,6 @@ function PatchBay({
         </button>
       </div>
 
-      <div className="fp-row-labels" aria-hidden>
-        {ROW_LETTERS.map((r) => (
-          <span key={r}>{r}</span>
-        ))}
-      </div>
-
       <div
         ref={bayRef}
         className={`fp-patchbay v2${dragFrom ? ' patching' : ''}${jumperTool ? ' jumper-mode' : ''}`}
@@ -659,6 +661,88 @@ function PatchBay({
         }}
         onClick={() => setMenu(null)}
       >
+        <svg
+          className="fp-patch-silk"
+          viewBox={`0 0 ${PATCH_COLS} ${PATCH_ROWS}`}
+          preserveAspectRatio="none"
+          aria-hidden
+        >
+          {silkSections.map((s, i) => (
+            <line
+              key={`section-${i}`}
+              x1={s.x1}
+              y1={s.y1}
+              x2={s.x2}
+              y2={s.y2}
+              className="fp-silk-section"
+            />
+          ))}
+          {silkTies.map((s, i) => (
+            <line
+              key={`silk-${i}`}
+              x1={s.x1}
+              y1={s.y1}
+              x2={s.x2}
+              y2={s.y2}
+              className="fp-silk-tie"
+            />
+          ))}
+          {FREE_DIODE_BLOCKS.flatMap((block) =>
+            freeDiodeColPairs(block.cols).flatMap(([c0, c1]) =>
+              FREE_DIODE_VERTICAL_PAIRS.map(([r0, r1]) => {
+                // Legs run from left vertical-tie center to right vertical-tie center.
+                const x = (c0 + c1) / 2 - 0.5
+                const y = (rowIndex(r0) + rowIndex(r1) + 1) / 2
+                const half = (c1 - c0) / 2
+                const right = freeDiodePairPointsRight([r0, r1])
+                // Triangle points at the cathode bar (top →, bottom ←).
+                const tri = right
+                  ? 'M -0.12 -0.1 L -0.12 0.1 L 0.08 0 Z'
+                  : 'M 0.12 -0.1 L 0.12 0.1 L -0.08 0 Z'
+                const barX = right ? 0.12 : -0.12
+                return (
+                  <g
+                    key={`diode-${c0}-${c1}-${r0}-${r1}`}
+                    className="fp-silk-diode"
+                    transform={`translate(${x} ${y})`}
+                  >
+                    <line x1={-half} y1={0} x2={-0.12} y2={0} />
+                    <path d={tri} />
+                    <line x1={barX} y1={-0.12} x2={barX} y2={0.12} />
+                    <line x1={0.12} y1={0} x2={half} y2={0} />
+                  </g>
+                )
+              }),
+            ),
+          )}
+        </svg>
+        {/* Amp numbers between k and l — overlay grid so labels don't steal
+            auto-placed jack cells. */}
+        <div
+          className="fp-amp-labels"
+          aria-hidden
+          style={{
+            gridTemplateColumns: `repeat(${PATCH_COLS}, 1fr)`,
+            gridTemplateRows: `repeat(${PATCH_ROWS}, 1fr)`,
+          }}
+        >
+          {AMP_STRIPS.map((strip) => {
+            const [left, right] = strip.cols
+            const k = rowIndex('k')
+            return (
+              <span
+                key={`amp-label-${strip.amp}`}
+                className="fp-amp-strip-label"
+                style={{
+                  gridColumn: `${left} / ${right + 1}`,
+                  gridRow: `${k + 1} / ${k + 3}`,
+                }}
+              >
+                {String(strip.amp).padStart(2, '0')}
+              </span>
+            )
+          })}
+        </div>
         <svg
           className="fp-patch-cables"
           viewBox={`0 0 ${PATCH_COLS} ${PATCH_ROWS}`}
@@ -698,8 +782,8 @@ function PatchBay({
             )
           })}
           {/* Jumper blocks — mode4 is a 4-pin Umschaltstecker spanning both
-              strip columns × two rows; time2 is a 2-pin shorting plug on the
-              left config column only. */}
+              strip columns × two rows (a–b or b–c). time2 is a horizontal
+              2-pin capacitor short on row d (same holes for 1 and 10). */}
           {machine.jumpers.map((j) => {
             const block = SWITCHABLE_BLOCKS.find((b) => b.ampSlot === j.ampSlot)
             if (!block) return null
@@ -708,17 +792,30 @@ function PatchBay({
             const row1 = ROW_LETTERS.indexOf(r1)
             const col = block.cols[0] - 1
             const y = Math.min(row0, row1)
-            const h = Math.abs(row1 - row0) + 1
-            const wide = j.kind === 'mode4'
+            const h = Math.max(1, Math.abs(row1 - row0) + 1)
+            if (j.kind === 'mode4') {
+              return (
+                <rect
+                  key={j.id}
+                  x={col + 0.12}
+                  y={y + 0.12}
+                  width={1.76}
+                  height={h - 0.24}
+                  rx={0.12}
+                  className="fp-jumper-block kind-mode4"
+                />
+              )
+            }
+            // Horizontal 2-pin on row d across both strip columns.
             return (
               <rect
                 key={j.id}
                 x={col + 0.12}
-                y={y + 0.12}
-                width={wide ? 1.76 : 0.76}
-                height={h - 0.24}
-                rx={0.12}
-                className={`fp-jumper-block kind-${j.kind}`}
+                y={y + 0.28}
+                width={1.76}
+                height={0.44}
+                rx={0.1}
+                className="fp-jumper-block kind-time2"
               />
             )
           })}
@@ -749,33 +846,45 @@ function PatchBay({
           const leftCol1 = c.col + 1
           const jumperTarget =
             jumperTool && SWITCHABLE_LEFT_COLS.includes(leftCol1 as never)
+          const mark = c.mark ? (
+            <span className="fp-jack-mark" aria-hidden>
+              {c.mark}
+            </span>
+          ) : null
 
           if (!live) {
             return (
-              <span
+              <div
                 key={`${c.col},${c.row}`}
-                className={`fp-jack color-${c.color} unused${jumperTarget ? ' jumper-target' : ''}`}
-                title={c.label || c.jackId}
+                className={`fp-jack-cell${jumperTarget ? ' jumper-target' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (jumperTool) placeJumperOnCol(c.col)
+                }}
+              >
+                {mark}
+                <span
+                  className={`fp-jack color-${c.color} unused`}
+                  title={c.label || c.jackId}
+                />
+              </div>
+            )
+          }
+
+          return (
+            <div key={`${c.col},${c.row}-${key}`} className="fp-jack-cell">
+              {mark}
+              <button
+                type="button"
+                className={`fp-jack color-${c.color}${lit ? ' lit' : ''}${selected ? ' selected' : ''}`}
+                title={`${c.label} (${c.direction})`}
+                onPointerDown={(e) => onJackPointerDown(c, e)}
                 onClick={(e) => {
                   e.stopPropagation()
                   if (jumperTool) placeJumperOnCol(c.col)
                 }}
               />
-            )
-          }
-
-          return (
-            <button
-              key={`${c.col},${c.row}-${key}`}
-              type="button"
-              className={`fp-jack color-${c.color}${lit ? ' lit' : ''}${selected ? ' selected' : ''}`}
-              title={`${c.label} (${c.direction})`}
-              onPointerDown={(e) => onJackPointerDown(c, e)}
-              onClick={(e) => {
-                e.stopPropagation()
-                if (jumperTool) placeJumperOnCol(c.col)
-              }}
-            />
+            </div>
           )
         })}
 
@@ -808,12 +917,6 @@ function PatchBay({
             ))}
           </div>
         )}
-      </div>
-
-      <div className="fp-col-labels" aria-hidden>
-        {Array.from({ length: PATCH_COLS }, (_, i) => (
-          <span key={i}>{i + 1}</span>
-        ))}
       </div>
     </div>
   )
