@@ -2,10 +2,10 @@ import type { MachineMode } from '../engine/types'
 import type { MachineState } from '../engine/circuit'
 
 const MODE_LABELS: Record<MachineMode, string> = {
-  potSet: 'Pot Set',
-  ic: 'Initial Conditions',
-  operate: 'Operate',
-  hold: 'Hold',
+  potSet: 'Pot. Set',
+  ic: 'Pause (IC)',
+  operate: 'Compute',
+  hold: 'Hold (Halt)',
 }
 
 interface ControlsProps {
@@ -249,8 +249,9 @@ export function Controls({
         )}
         {status && <p className="meta">{status}</p>}
         <p className="hint">
-          Drag from an orange/red/blue output jack to a green/yellow input.
-          Click a cable to delete it.
+          Schematic or Front panel: patch from red/orange/blue outputs to
+          green/white inputs. Click a cable to remove it. Pause = IC, Halt =
+          Hold.
         </p>
       </section>
     </aside>

@@ -1,4 +1,6 @@
 export * from './types'
 export * from './elements'
+export * from './functionGenerator'
+export * from './jumpers'
 export * from './solver'
 export * from './circuit'

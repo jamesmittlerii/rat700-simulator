@@ -1,6 +1,18 @@
 /** Machine operating modes (English labels in UI). */
 export type MachineMode = 'potSet' | 'ic' | 'operate' | 'hold'
 
+/** Six interlocked control-panel buttons (German faceplate). */
+export type PanelButton =
+  | 'pause'
+  | 'dauer'
+  | 'halt'
+  | 'potSet'
+  | 'einmal'
+  | 'fremd'
+
+/** Integrator time-constant factor from 2-pin jumper (1 / 10 / 100 s⁻¹). */
+export type TimeFactor = 1 | 10 | 100
+
 export type ElementKind =
   | 'reference'
   | 'potentiometer'
@@ -11,6 +23,8 @@ export type ElementKind =
   | 'signal'
   /** Variable diode function generator (piecewise linear). */
   | 'functionGenerator'
+  /** Four-quadrant parabolic (quarter-square) multiplier. */
+  | 'multiplier'
 
 export type SignalWaveform = 'road' | 'sine'
 
@@ -32,6 +46,28 @@ export interface Cable {
   id: string
   from: PortRef
   to: PortRef
+  /** Structural patch-cord color override. */
+  color?: string
+}
+
+/** 4-pin Umschaltstecker or 2-pin time-constant short on config rows. */
+export type JumperKind = 'mode4' | 'time2'
+
+export interface JumperPlacement {
+  id: string
+  kind: JumperKind
+  /** Amplifier slot index 0–7 for switchable Σ/∫ blocks. */
+  ampSlot: number
+  /**
+   * mode4: 'sigma' = rows a–b (summer), 'integral' = rows b–c (integrator).
+   * time2: '1' = rows c–d, '10' = rows d–e.
+   */
+  position: 'sigma' | 'integral' | '1' | '10'
+}
+
+export interface AmpConfig {
+  mode: 'summer' | 'integrator'
+  timeFactor: TimeFactor
 }
 
 export interface CircuitNode {
@@ -50,6 +86,8 @@ export interface CircuitNode {
   initialCondition?: number
   /** Per-input gains for summer/integrator (port name → gain). */
   inputGains?: Record<string, InputGain>
+  /** Integrator time-constant factor from jumper (default 1). */
+  timeFactor?: TimeFactor
   /** Signal generator waveform. */
   waveform?: SignalWaveform
   /** Signal amplitude in volts (peak). */
@@ -58,6 +96,8 @@ export interface CircuitNode {
   frequency?: number
   /** Diode function-generator breakpoints. */
   breakpoints?: Breakpoint[]
+  /** Faceplate amplifier slot (0–14) when mapped to Programmierfeld. */
+  ampSlot?: number
 }
 
 export interface CircuitSnapshot {
@@ -67,13 +107,20 @@ export interface CircuitSnapshot {
   powered: boolean
   timeScale: number
   time: number
+  jumpers?: JumperPlacement[]
+  panelButton?: PanelButton
+  masterRef?: number
+  calibratePotId?: string | null
+  autoShutdown?: boolean
+  stepsPerFrame?: number
+  externalSlave?: boolean
 }
 
 export interface PortDef {
   name: string
   direction: PortDirection
-  /** Display / jack color hint. */
-  jack: 'green' | 'orange' | 'red' | 'blue' | 'black' | 'yellow'
+  /** Display / jack color hint (RAT 700 Programmierfeld coding). */
+  jack: 'green' | 'orange' | 'red' | 'blue' | 'black' | 'yellow' | 'white' | 'brown'
   label?: string
 }
 
@@ -83,7 +130,26 @@ export const OVERLOAD_THRESHOLD = 10.5
 export const MAX_AMPLIFIERS = 36
 export const MAX_POTENTIOMETERS = 40
 export const MAX_FUNCTION_GENERATORS = 2
+export const MAX_MULTIPLIERS = 4
+/** Default fixed RK4 substeps per animation frame when not scope-driven. */
+export const DEFAULT_STEPS_PER_FRAME = 8
 
 export function portKey(ref: PortRef): string {
   return `${ref.nodeId}:${ref.port}`
+}
+
+export function panelButtonToMode(button: PanelButton): MachineMode {
+  switch (button) {
+    case 'pause':
+      return 'ic'
+    case 'dauer':
+    case 'einmal':
+      return 'operate'
+    case 'halt':
+      return 'hold'
+    case 'potSet':
+      return 'potSet'
+    case 'fremd':
+      return 'hold'
+  }
 }

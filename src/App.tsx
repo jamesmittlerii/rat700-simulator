@@ -7,8 +7,14 @@ import {
   removeCable,
   removeNode,
   resetTime,
+  setCableColor,
+  setCalibratePot,
   setCoefficient,
+  setFgBreakpoint,
   setInitialCondition,
+  setJumper,
+  setMasterRef,
+  setPanelButton,
   setSignalParams,
   setMode,
   stepMachine,
@@ -16,32 +22,47 @@ import {
   moveNode,
   type MachineState,
 } from './engine/circuit'
-import type { ElementKind, MachineMode, PortRef } from './engine/types'
+import type {
+  ElementKind,
+  JumperPlacement,
+  MachineMode,
+  PanelButton,
+  PortRef,
+} from './engine/types'
 import { loadHarmonicOscillator } from './presets/harmonicOscillator'
 import {
   loadVehicleSuspension,
   VEHICLE_NODES,
 } from './presets/vehicleSuspension'
 import { Controls } from './ui/Controls'
+import { FrontPanel } from './ui/FrontPanel'
 import { SchematicCanvas } from './ui/SchematicCanvas'
 import { XYScope } from './ui/XYScope'
 import './App.css'
 
-const STORAGE_KEY = 'rat700-patch-v1'
+const STORAGE_KEY = 'rat700-patch-v2'
 const SCOPE_HEIGHT_KEY = 'rat700-scope-height'
+const WORKSPACE_TAB_KEY = 'rat700-workspace-tab'
 const SCOPE_HEIGHT_DEFAULT = 220
 const SCOPE_HEIGHT_MIN = 140
 const SCOPE_HEIGHT_MAX = 560
 
+type WorkspaceTab = 'schematic' | 'frontPanel'
+
 export default function App() {
   const [machine, setMachineState] = useState<MachineState>(() =>
-    loadHarmonicOscillator(),
+    setPanelButton(loadVehicleSuspension('firm'), 'dauer'),
   )
-  const [selectedId, setSelectedId] = useState<string | null>('int_1')
+  const [selectedId, setSelectedId] = useState<string | null>(VEHICLE_NODES.body)
   const [status, setStatus] = useState<string | undefined>()
   const [activePreset, setActivePreset] = useState<
     'oscillator' | 'vehicle-firm' | 'vehicle-soft' | null
-  >('oscillator')
+  >('vehicle-firm')
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(() => {
+    const raw = localStorage.getItem(WORKSPACE_TAB_KEY)
+    if (raw === 'schematic') return 'schematic'
+    return 'frontPanel'
+  })
   const [scopeHeight, setScopeHeight] = useState(() => {
     const raw = localStorage.getItem(SCOPE_HEIGHT_KEY)
     const n = raw ? Number(raw) : SCOPE_HEIGHT_DEFAULT
@@ -52,6 +73,11 @@ export default function App() {
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
   const machineRef = useRef(machine)
   machineRef.current = machine
+
+  const selectWorkspaceTab = useCallback((tab: WorkspaceTab) => {
+    setWorkspaceTab(tab)
+    localStorage.setItem(WORKSPACE_TAB_KEY, tab)
+  }, [])
 
   const onSplitterPointerDown = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
@@ -124,6 +150,13 @@ export default function App() {
     [setMachine],
   )
 
+  const onPanelButton = useCallback(
+    (btn: PanelButton) => {
+      setMachine((m) => setPanelButton(m, btn))
+    },
+    [setMachine],
+  )
+
   const onAdd = useCallback(
     (kind: 'potentiometer' | 'summer' | 'integrator' | 'inverter') => {
       setMachine((m) => {
@@ -142,9 +175,9 @@ export default function App() {
   )
 
   const onConnect = useCallback(
-    (from: PortRef, to: PortRef) => {
+    (from: PortRef, to: PortRef, color?: string) => {
       setMachine((m) => {
-        const { machine: next, error } = addCable(m, from, to)
+        const { machine: next, error } = addCable(m, from, to, color)
         if (error) setStatus(error)
         return next
       })
@@ -223,32 +256,106 @@ export default function App() {
       />
 
       <main className="workspace">
-        <div className="readouts" style={{ height: scopeHeight }}>
-          <XYScope machine={machine} />
+        <div className="workspace-tabs" role="tablist" aria-label="Workspace view">
+          <button
+            type="button"
+            role="tab"
+            id="tab-schematic"
+            aria-selected={workspaceTab === 'schematic'}
+            aria-controls="panel-schematic"
+            className={
+              workspaceTab === 'schematic' ? 'workspace-tab active' : 'workspace-tab'
+            }
+            onClick={() => selectWorkspaceTab('schematic')}
+          >
+            Schematic
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-front-panel"
+            aria-selected={workspaceTab === 'frontPanel'}
+            aria-controls="panel-front-panel"
+            className={
+              workspaceTab === 'frontPanel' ? 'workspace-tab active' : 'workspace-tab'
+            }
+            onClick={() => selectWorkspaceTab('frontPanel')}
+          >
+            Front panel
+          </button>
         </div>
-        <div
-          className="workspace-splitter"
-          role="separator"
-          aria-orientation="horizontal"
-          aria-valuenow={scopeHeight}
-          aria-valuemin={SCOPE_HEIGHT_MIN}
-          aria-valuemax={SCOPE_HEIGHT_MAX}
-          aria-label="Resize scope"
-          onPointerDown={onSplitterPointerDown}
-          onPointerMove={onSplitterPointerMove}
-          onPointerUp={onSplitterPointerUp}
-          onPointerCancel={onSplitterPointerUp}
-        />
-        <SchematicCanvas
-          machine={machine}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onMoveNode={(id, x, y) =>
-            setMachine((m) => moveNode(m, id, x, y))
-          }
-          onConnect={onConnect}
-          onRemoveCable={(id) => setMachine((m) => removeCable(m, id))}
-        />
+
+        {workspaceTab === 'schematic' ? (
+          <div
+            className="workspace-panel"
+            role="tabpanel"
+            id="panel-schematic"
+            aria-labelledby="tab-schematic"
+          >
+            <div className="readouts" style={{ height: scopeHeight }}>
+              <XYScope machine={machine} />
+            </div>
+            <div
+              className="workspace-splitter"
+              role="separator"
+              aria-orientation="horizontal"
+              aria-valuenow={scopeHeight}
+              aria-valuemin={SCOPE_HEIGHT_MIN}
+              aria-valuemax={SCOPE_HEIGHT_MAX}
+              aria-label="Resize scope"
+              onPointerDown={onSplitterPointerDown}
+              onPointerMove={onSplitterPointerMove}
+              onPointerUp={onSplitterPointerUp}
+              onPointerCancel={onSplitterPointerUp}
+            />
+            <SchematicCanvas
+              machine={machine}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onMoveNode={(id, x, y) =>
+                setMachine((m) => moveNode(m, id, x, y))
+              }
+              onConnect={onConnect}
+              onRemoveCable={(id) => setMachine((m) => removeCable(m, id))}
+            />
+          </div>
+        ) : (
+          <div
+            className="workspace-panel front-panel-host"
+            role="tabpanel"
+            id="panel-front-panel"
+            aria-labelledby="tab-front-panel"
+          >
+            <FrontPanel
+              machine={machine}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onPanelButton={onPanelButton}
+              onPower={(on) => setMachine((m) => ({ ...m, powered: on }))}
+              onCoefficient={(id, k) =>
+                setMachine((m) => setCoefficient(m, id, k))
+              }
+              onConnect={onConnect}
+              onRemoveCable={(id) => setMachine((m) => removeCable(m, id))}
+              onCableColor={(id, color) =>
+                setMachine((m) => setCableColor(m, id, color))
+              }
+              onJumper={(j: JumperPlacement) =>
+                setMachine((m) => setJumper(m, j))
+              }
+              onMasterRef={(v) => setMachine((m) => setMasterRef(m, v))}
+              onCalibratePot={(id) =>
+                setMachine((m) => setCalibratePot(m, id))
+              }
+              onAutoShutdown={(on) =>
+                setMachine((m) => ({ ...m, autoShutdown: on }))
+              }
+              onFgBreakpoint={(id, index, y) =>
+                setMachine((m) => setFgBreakpoint(m, id, index, y))
+              }
+            />
+          </div>
+        )}
       </main>
     </div>
   )

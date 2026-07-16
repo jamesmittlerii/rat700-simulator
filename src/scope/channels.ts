@@ -6,6 +6,16 @@ export interface ScopeChannel {
   label: string
   xNode: string
   yNode: string
+  xScale?: number
+  yScale?: number
+  xOffset?: number
+  yOffset?: number
+  /**
+   * Rigid-body bounce / mix terms added after scale+offset (full 1:1 unless
+   * yAddScale is set). Keeps roof and sill locked during body motion.
+   */
+  yAddNodes?: readonly string[]
+  yAddScale?: number
 }
 
 /** Harmonic oscillator: X/Y orbit from the two integrators. */

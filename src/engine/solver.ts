@@ -1,6 +1,8 @@
 import {
+  bipolarInput,
   integratorDerivative,
   inverterOutput,
+  multiplierOutput,
   portsFor,
   potOutput,
   signalOutput,
@@ -15,6 +17,7 @@ import {
   type MachineMode,
   portKey,
   type PortRef,
+  type TimeFactor,
 } from './types'
 
 export interface EvalResult {
@@ -23,6 +26,9 @@ export interface EvalResult {
   overloaded: Set<string>
   warning?: string
 }
+
+const SUM_PORTS = ['in0', 'in1', 'in2', 'in3', 'in4', 's'] as const
+const INT_PORTS = ['in0', 'in1', 'in2', 'in3', 'in4', 's'] as const
 
 function gainFor(node: CircuitNode, port: string): InputGain {
   return node.inputGains?.[port] ?? 1
@@ -45,7 +51,8 @@ function isAlgebraic(kind: CircuitNode['kind']): boolean {
     kind === 'potentiometer' ||
     kind === 'summer' ||
     kind === 'inverter' ||
-    kind === 'functionGenerator'
+    kind === 'functionGenerator' ||
+    kind === 'multiplier'
   )
 }
 
@@ -123,7 +130,8 @@ export function evaluateAlgebraic(
   }
 
   if (remaining.size > 0) {
-    warning = 'Algebraic loop detected — patch may be invalid.'
+    warning =
+      'Ungrounded algebraic feedback loop — patch may be invalid.'
     order.push(...remaining)
   }
 
@@ -145,9 +153,8 @@ export function evaluateAlgebraic(
       const vin = readInput({ nodeId: n.id, port: 'in' })
       voltages[portKey({ nodeId: n.id, port: 'out' })] = inverterOutput(vin)
     } else if (n.kind === 'summer') {
-      const ports = ['in0', 'in1', 'in2']
-      const inputs = ports.map((p) => readInput({ nodeId: n.id, port: p }))
-      const gains = ports.map((p) => gainFor(n, p))
+      const inputs = SUM_PORTS.map((p) => readInput({ nodeId: n.id, port: p }))
+      const gains = SUM_PORTS.map((p) => gainFor(n, p))
       voltages[portKey({ nodeId: n.id, port: 'out' })] = summerOutput(
         inputs,
         gains,
@@ -156,6 +163,16 @@ export function evaluateAlgebraic(
       const vin = readInput({ nodeId: n.id, port: 'in' })
       voltages[portKey({ nodeId: n.id, port: 'out' })] =
         functionGeneratorOutput(vin, n.breakpoints ?? [])
+    } else if (n.kind === 'multiplier') {
+      const xp = readInput({ nodeId: n.id, port: 'xp' })
+      const xm = readInput({ nodeId: n.id, port: 'xm' })
+      const yp = readInput({ nodeId: n.id, port: 'yp' })
+      const ym = readInput({ nodeId: n.id, port: 'ym' })
+      const x = bipolarInput(xp, xm)
+      const y = bipolarInput(yp, ym)
+      const product = multiplierOutput(x, y)
+      voltages[portKey({ nodeId: n.id, port: 'out' })] = product
+      voltages[portKey({ nodeId: n.id, port: 'g' })] = product
     }
   }
 
@@ -174,10 +191,10 @@ export function evaluateAlgebraic(
   const derivatives: Record<string, number> = {}
   for (const n of nodes) {
     if (n.kind !== 'integrator') continue
-    const ports = ['in0', 'in1']
-    const inputs = ports.map((p) => readInput({ nodeId: n.id, port: p }))
-    const gains = ports.map((p) => gainFor(n, p))
-    derivatives[n.id] = integratorDerivative(inputs, gains)
+    const inputs = INT_PORTS.map((p) => readInput({ nodeId: n.id, port: p }))
+    const gains = INT_PORTS.map((p) => gainFor(n, p))
+    const tf = (n.timeFactor ?? 1) as TimeFactor
+    derivatives[n.id] = integratorDerivative(inputs, gains, tf)
   }
 
   for (const [key, v] of Object.entries(voltages)) {
