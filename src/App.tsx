@@ -35,6 +35,10 @@ import {
   VEHICLE_NODES,
 } from './presets/vehicleSuspension'
 import { loadLorenzAttractor, LORENZ_NODES } from './presets/lorenzAttractor'
+import { loadRosslerAttractor, ROSSLER_NODES } from './presets/rosslerAttractor'
+import { loadVanDerPol, VAN_DER_POL_NODES } from './presets/vanDerPol'
+import { loadMathieuEquation, MATHIEU_NODES } from './presets/mathieuEquation'
+import { loadDuffingOscillator, DUFFING_NODES } from './presets/duffingOscillator'
 import { Controls } from './ui/Controls'
 import { FrontPanel } from './ui/FrontPanel'
 import { SchematicCanvas } from './ui/SchematicCanvas'
@@ -57,7 +61,15 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(VEHICLE_NODES.body)
   const [status, setStatus] = useState<string | undefined>()
   const [activePreset, setActivePreset] = useState<
-    'oscillator' | 'vehicle-firm' | 'vehicle-soft' | 'lorenz' | null
+    | 'oscillator'
+    | 'vehicle-firm'
+    | 'vehicle-soft'
+    | 'lorenz'
+    | 'rossler'
+    | 'vanDerPol'
+    | 'mathieu'
+    | 'duffing'
+    | null
   >('vehicle-firm')
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(() => {
     const raw = localStorage.getItem(WORKSPACE_TAB_KEY)
@@ -239,6 +251,30 @@ export default function App() {
           setSelectedId(LORENZ_NODES.x)
           setActivePreset('lorenz')
           setStatus('Loaded Lorenz attractor preset — press Compute (Operate).')
+        }}
+        onLoadRossler={() => {
+          setMachine(loadRosslerAttractor())
+          setSelectedId(ROSSLER_NODES.x)
+          setActivePreset('rossler')
+          setStatus('Loaded Rössler attractor preset — press Compute (Operate).')
+        }}
+        onLoadVanDerPol={() => {
+          setMachine(loadVanDerPol())
+          setSelectedId(VAN_DER_POL_NODES.x)
+          setActivePreset('vanDerPol')
+          setStatus('Loaded Van der Pol oscillator — press Compute (Operate).')
+        }}
+        onLoadMathieu={() => {
+          setMachine(loadMathieuEquation())
+          setSelectedId(MATHIEU_NODES.x)
+          setActivePreset('mathieu')
+          setStatus('Loaded Mathieu equation — press Compute (Operate).')
+        }}
+        onLoadDuffing={() => {
+          setMachine(loadDuffingOscillator())
+          setSelectedId(DUFFING_NODES.x)
+          setActivePreset('duffing')
+          setStatus('Loaded Duffing oscillator — press Compute (Operate).')
         }}
         onSave={handleSave}
         onLoad={handleLoadSaved}

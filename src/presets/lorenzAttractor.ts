@@ -180,12 +180,14 @@ export const LORENZ_NODES = {
 export const LORENZ_SCOPE_CHANNELS = [
   {
     id: 'lorenzXZ',
-    label: 'x–z',
+    label: 'Lorenz · x–z',
+    title: 'X/Y scope — Lorenz attractor (x–z butterfly)',
     xNode: 'lorenz_x',
     yNode: 'lorenz_z',
     xScale: 1.25,
     yScale: 1.25,
     // Centre the z lobe (mean vZ ≈ 4) around the middle of the tube.
     yOffset: -5,
+    persistSec: 8,
   },
 ] as const

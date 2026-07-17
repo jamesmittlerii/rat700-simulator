@@ -10,13 +10,11 @@ type Pt = { x: number; y: number; t: number }
 
 const PERSIST_VEHICLE = 0.28
 const PERSIST_ORBIT = 2.5
-/** Longer phosphor so the chaotic Lorenz orbit fills in both wings. */
-const PERSIST_LORENZ = 8
 /** Volts visible across half-width / half-height at baseline size. */
 const VOLTS_HALF_VEHICLE = 3.75
 const VOLTS_HALF_ORBIT = 11
 
-/** Shared phosphor X/Y oscilloscope for vehicle mux or oscillator orbit. */
+/** Shared phosphor X/Y oscilloscope for vehicle mux or single-trace orbits. */
 export function XYScope({ machine }: XYScopeProps) {
   const buffers = useRef<Record<string, Pt[]>>({})
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -27,12 +25,10 @@ export function XYScope({ machine }: XYScopeProps) {
 
   const channels = scopeChannelsFor(machine.nodes)
   const isVehicle = channels.some((c) => c.id === 'wheelL')
-  const isLorenz = channels.some((c) => c.id === 'lorenzXZ')
-  const persistSec = isVehicle
-    ? PERSIST_VEHICLE
-    : isLorenz
-      ? PERSIST_LORENZ
-      : PERSIST_ORBIT
+  // Single-trace presets (Lorenz, Rössler, oscillators…) may carry their own
+  // phosphor persistence and a scope title on the first channel.
+  const persistSec =
+    channels[0]?.persistSec ?? (isVehicle ? PERSIST_VEHICLE : PERSIST_ORBIT)
 
   useEffect(() => {
     const el = wrapRef.current
@@ -77,8 +73,9 @@ export function XYScope({ machine }: XYScopeProps) {
         }
       }
       const cutoff = machine.time - persistSec
-      // Keep enough points that the long-persist Lorenz orbit isn't truncated.
-      const maxPoints = isLorenz ? 4000 : 800
+      // Keep enough points that long-persist orbits (Lorenz/Duffing) aren't
+      // truncated before their persistence window elapses.
+      const maxPoints = persistSec > 4 ? 4000 : 800
       for (const id of Object.keys(buffers.current)) {
         const buf = buffers.current[id]!
         while (buf.length > 0 && buf[0]!.t < cutoff) buf.shift()
@@ -155,9 +152,7 @@ export function XYScope({ machine }: XYScopeProps) {
     ctx.fillText(
       isVehicle
         ? `X/Y mux · draw ~16 Hz · persist ${persistSec}s`
-        : isLorenz
-          ? `Lorenz butterfly · x–z · persist ${persistSec}s`
-          : `X/Y orbit · x=Int1  y=Int2 · persist ${persistSec}s`,
+        : `${channels[0]?.label ?? 'X/Y orbit'} · persist ${persistSec}s`,
       8,
       Math.max(14, h * 0.08),
     )
@@ -177,9 +172,7 @@ export function XYScope({ machine }: XYScopeProps) {
       <div className="vehicle-label">
         {isVehicle
           ? 'X/Y scope (mux) — cos/sin · FG body · RG-1 road'
-          : isLorenz
-            ? 'X/Y scope — Lorenz attractor (x–z butterfly)'
-            : 'X/Y scope — harmonic oscillator orbit'}
+          : (channels[0]?.title ?? 'X/Y scope — harmonic oscillator orbit')}
       </div>
       <div className="vehicle-canvas-wrap" ref={wrapRef}>
         <canvas
