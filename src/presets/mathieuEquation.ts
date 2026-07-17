@@ -122,8 +122,7 @@ export const MATHIEU_SCOPE_CHANNELS = [
     yNode: 'mathieu_v',
     xScale: 1.8,
     yScale: 2.2,
-    // Machine-time phosphor window. Scaled with TF so the visible trail
-    // covers ~the same amount of equation evolution as the old 5 s @ TF=1.
-    persistSec: 5 / TF,
+    // Longer phosphor window so the 10×-faster rings leave more history.
+    persistSec: 5,
   },
 ] as const
