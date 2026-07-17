@@ -122,7 +122,7 @@ export const MATHIEU_SCOPE_CHANNELS = [
     yNode: 'mathieu_v',
     xScale: 1.8,
     yScale: 2.2,
-    // Longer phosphor window so the 10×-faster rings leave more history.
+    // At 1×; scope scales by timeScale (preset default 2× → 10 s trail).
     persistSec: 5,
   },
 ] as const
