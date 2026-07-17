@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type Ref,
   type WheelEvent as ReactWheelEvent,
 } from 'react'
 import { potCalMeter, type MachineState } from '../engine/circuit'
@@ -45,7 +46,7 @@ import {
   type PatchCell,
 } from './patchLayout'
 import { buildSilkTies, buildSilkSectionLines } from './silkTies'
-import { XYScope } from './XYScope'
+import { XYScope, type XYScopeHandle } from './XYScope'
 
 const CABLE_COLORS = ['#c45c26', '#2a6f97', '#2d6a4f', '#7b2d8e', '#b08968']
 
@@ -77,6 +78,7 @@ interface FrontPanelProps {
   readonly onCalibratePot: (potId: string | null) => void
   readonly onAutoShutdown: (on: boolean) => void
   readonly onFgBreakpoint: (nodeId: string, index: number, y: number) => void
+  readonly scopeRef?: Ref<XYScopeHandle>
 }
 
 export function FrontPanel({
@@ -94,6 +96,7 @@ export function FrontPanel({
   onCalibratePot,
   onAutoShutdown,
   onFgBreakpoint,
+  scopeRef,
 }: FrontPanelProps) {
   const pots = useMemo(
     () =>
@@ -240,7 +243,7 @@ export function FrontPanel({
             ))}
           </fieldset>
           <div className="fp-scope-slot">
-            <XYScope machine={machine} />
+            <XYScope ref={scopeRef} machine={machine} />
           </div>
         </aside>
       </div>
@@ -515,7 +518,18 @@ function PatchBay({
   onJumper: (jumper: JumperPlacement) => void
   onAutoShutdown: (on: boolean) => void
 }) {
-  const cells = useMemo(() => buildPatchLayout(machine.nodes), [machine.nodes])
+  // The board layout depends only on the patch *structure* (node kinds/ids/
+  // labels/reference voltages), not on live integrator state. machine.nodes
+  // gets a fresh array identity every simulation frame, so key the memo on a
+  // structural signature to avoid rebuilding the 30×15 grid ~60×/s.
+  const layoutKey = machine.nodes
+    .map((n) => `${n.kind}:${n.id}:${n.label}:${n.voltage ?? ''}`)
+    .join('|')
+  const cells = useMemo(
+    () => buildPatchLayout(machine.nodes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [layoutKey],
+  )
   const silkTies = useMemo(() => buildSilkTies(), [])
   const silkSections = useMemo(() => buildSilkSectionLines(), [])
   const bayRef = useRef<HTMLDivElement>(null)
