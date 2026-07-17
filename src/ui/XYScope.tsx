@@ -44,6 +44,8 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const lastMode = useRef(machine.mode)
   const lastTime = useRef(-1)
+  /** Rolling 1 s window of feed() timestamps for the on-scope FPS readout. */
+  const fpsRef = useRef({ stamps: [] as number[], value: 0, lastFeed: 0 })
   // Latest measured canvas size, read imperatively so drawing never depends on
   // a React render having flushed the state value.
   const sizeRef = useRef({ w: 320, h: 170 })
@@ -172,7 +174,8 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
 
     ctx.shadowBlur = 0
     ctx.fillStyle = '#2a8f55'
-    ctx.font = `${Math.max(10, Math.round(h / 28))}px IBM Plex Sans, monospace`
+    const fontPx = Math.max(10, Math.round(h / 28))
+    ctx.font = `${fontPx}px IBM Plex Sans, monospace`
     ctx.fillText(
       isVehicle
         ? `X/Y mux · draw ~16 Hz · persist ${persistSec}s`
@@ -180,7 +183,13 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
       8,
       Math.max(14, h * 0.08),
     )
-    ctx.fillText(`t = ${m.time.toFixed(2)} s`, 8, h - 8)
+    const wallNow = performance.now()
+    const fpsFresh = wallNow - fpsRef.current.lastFeed < 500
+    const fpsLabel = fpsFresh ? `${Math.round(fpsRef.current.value)} fps` : '— fps'
+    const timeLabel = `t = ${m.time.toFixed(2)} s`
+    ctx.fillText(timeLabel, 8, h - 8)
+    const fpsWidth = ctx.measureText(fpsLabel).width
+    ctx.fillText(fpsLabel, Math.max(8, w - 8 - fpsWidth), h - 8)
   }, [])
 
   // Per-frame feed from the animation loop: accumulate + draw at 60 fps without
@@ -191,6 +200,18 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
       feed: (m: MachineState) => {
         const channels = scopeChannelsFor(m.nodes)
         if (channels.length === 0) return
+        const now = performance.now()
+        const fps = fpsRef.current
+        fps.lastFeed = now
+        fps.stamps.push(now)
+        while (fps.stamps.length > 0 && now - fps.stamps[0]! > 1000) {
+          fps.stamps.shift()
+        }
+        const oldest = fps.stamps[0]
+        fps.value =
+          fps.stamps.length > 1 && oldest != null
+            ? ((fps.stamps.length - 1) * 1000) / (now - oldest)
+            : 0
         accumulate(m, channels)
         render(m, channels)
       },
