@@ -229,15 +229,16 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
     }
   }
 
-  // Config silk a–d on switchable pairs
+  // Config silk a–d on switchable pairs.
+  // Σ / ∫ are drawn once centered over the 4-jack mode blocks (not per jack).
   for (const block of SWITCHABLE_BLOCKS) {
+    const [leftCol, rightCol] = block.cols
     for (const col1 of block.cols) {
-      place(cell(col1, 0, 'white', `Σ ${block.amp}`, undefined, undefined, { mark: 'Σ' }))
-      place(cell(col1, 1, 'white', `Σ/∫ ${block.amp}`, undefined, undefined, { mark: 'Σ/∫' }))
-      place(cell(col1, 2, 'white', `∫ ${block.amp}`, undefined, undefined, { mark: '∫' }))
+      place(cell(col1, 0, 'white', `Σ ${block.amp}`))
+      place(cell(col1, 1, 'white', `Σ/∫ ${block.amp}`))
+      place(cell(col1, 2, 'white', `∫ ${block.amp}`))
     }
     // Row d: capacitor selector pair (horizontal 1 / 10 short).
-    const [leftCol, rightCol] = block.cols
     place(cell(leftCol, 3, 'white', `1 ${block.amp}`, undefined, undefined, { mark: '1' }))
     place(cell(rightCol, 3, 'white', `10 ${block.amp}`, undefined, undefined, { mark: '10' }))
   }
@@ -478,20 +479,13 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
     }
   })
 
-  // Function generators cols 5 / 23
+  // Function generators cols 5 / 23 — F1/F2 silk is a single centered label
+  // under the top jack (drawn in the overlay), not per-hole marks.
   fgs.forEach((fg, i) => {
     const col1 = i === 0 ? FG_COLS.F1 : FG_COLS.F2
     const name = `F${i + 1}`
     place(
-      cell(
-        col1,
-        0,
-        'green',
-        `${name} In`,
-        { nodeId: fg.id, port: 'in' },
-        'in',
-        { mark: name },
-      ),
+      cell(col1, 0, 'green', `${name} In`, { nodeId: fg.id, port: 'in' }, 'in'),
     )
     for (const row of [1, 2, 3]) {
       place(
@@ -502,7 +496,6 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
           `${name} Out`,
           { nodeId: fg.id, port: 'out' },
           'out',
-          { mark: 'f' },
         ),
       )
     }
@@ -511,16 +504,13 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
   // Multiplikator silk (always) — museum photo / §3.7.1:
   // two parallel green jacks for each of +X, +Y, −X, −Y; the right column
   // has three red network outputs and the white G jack at the bottom.
+  // XY labels are drawn once centered between the left pair (overlay).
   for (const bank of MULTIPLIER_BANKS) {
     const [c0, c1, c2] = bank.cols
     const tag = `M${bank.index + 1}`
     const inputLabels = ['+X', '+Y', '−X', '−Y'] as const
     for (let row = 0; row < 4; row++) {
-      place(
-        cell(c0, row, 'green', `${tag} ${inputLabels[row]}`, undefined, undefined, {
-          mark: inputLabels[row],
-        }),
-      )
+      place(cell(c0, row, 'green', `${tag} ${inputLabels[row]}`))
       place(cell(c1, row, 'green', `${tag} ${inputLabels[row]} parallel`))
     }
     for (const row of [0, 1, 2]) {
@@ -536,13 +526,6 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
     const bank = MULTIPLIER_BANKS[i]
     if (!bank) return
     const [c0, c1, c2] = bank.cols
-    const marks: Record<string, string> = {
-      xp: '+X',
-      yp: '+Y',
-      xm: '−X',
-      ym: '−Y',
-      g: 'G',
-    }
     const map: [number, number, string, JackColor, PortDirection][] = [
       [c0, 0, 'xp', 'green', 'in'],
       [c1, 0, 'xp', 'green', 'in'],
@@ -566,7 +549,7 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
           `M${i + 1} ${port}`,
           { nodeId: m.id, port },
           dir,
-          { mark: marks[port] },
+          port === 'g' ? { mark: 'G' } : undefined,
         ),
       )
     }

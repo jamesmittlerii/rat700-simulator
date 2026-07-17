@@ -744,17 +744,25 @@
 
 .fp-amp-labels {
   position: absolute;
-  inset: 0;
+  /* Match .fp-patchbay padding / silk+cable insets so cells line up with jacks */
+  inset: 0.45rem;
+  width: calc(100% - 0.9rem);
+  height: calc(100% - 0.9rem);
   display: grid;
   gap: 1px;
   pointer-events: none;
   z-index: 2;
 }
 
-.fp-amp-strip-label {
+.fp-amp-strip-label,
+.fp-mode-silk-label {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   pointer-events: none;
   user-select: none;
   font-family: 'IBM Plex Sans Condensed', 'Segoe UI Narrow', sans-serif;
@@ -764,6 +772,53 @@
   color: #0a0a0a;
   letter-spacing: -0.02em;
   text-shadow: 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.fp-amp-strip-label {
+  /* Nudge amp numbers (01, 02, …) up about one line toward row k */
+  transform: translateY(-1em);
+}
+
+/* F1/F2 — centered between the top (input) jack and the one below */
+.fp-fg-silk-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: none;
+  user-select: none;
+  font-family: 'IBM Plex Sans Condensed', 'Segoe UI Narrow', sans-serif;
+  font-size: clamp(5px, 0.55vw, 8px);
+  font-weight: 600;
+  line-height: 1;
+  color: #0a0a0a;
+  letter-spacing: -0.02em;
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+/* Multiplikator +X/+Y/−X/−Y — top-aligned like jack marks. Nudge left ~half a
+   glyph so the X/Y (not the whole ±X string) reads as centered between jacks. */
+.fp-mult-silk-label {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: none;
+  user-select: none;
+  font-family: 'IBM Plex Sans Condensed', 'Segoe UI Narrow', sans-serif;
+  font-size: clamp(5px, 0.55vw, 8px);
+  font-weight: 600;
+  line-height: 1;
+  color: #0a0a0a;
+  letter-spacing: -0.02em;
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.45);
+  transform: translateX(-0.3em);
 }
 
 .fp-cable {
@@ -1306,17 +1361,27 @@ button.fp-jack:hover {
 .front-panel.v2 .fp-pots {
   display: grid;
   grid-template-columns: repeat(10, minmax(0, 1fr));
-  gap: 0.25rem;
-  padding: 0.4rem;
+  gap: 0.35rem 0.3rem;
+  padding: 0.45rem 0.4rem 0.4rem;
   background: linear-gradient(180deg, #9aa4ac, #7a848c);
   border: 1px solid #5a646c;
 }
 
 .fp-pot {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.15rem;
+  gap: 0.12rem;
+  padding-top: 0;
+}
+
+.fp-pot-face {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(3.25rem, 92%);
 }
 
 .fp-pot.calibrating .fp-pot-channel {
@@ -1324,9 +1389,15 @@ button.fp-jack:hover {
   box-shadow: 0 0 0 1px #a08020;
 }
 
+/* Index badge on the dial’s top-left corner */
 .fp-pot-channel {
-  font-size: 0.58rem;
-  padding: 0.1rem 0.25rem;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  font-size: 0.52rem;
+  line-height: 1;
+  padding: 0.08rem 0.18rem;
   border: 1px solid #4a545c;
   background: #c8d0d6;
   cursor: pointer;
@@ -1342,7 +1413,14 @@ button.fp-jack:hover {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.1rem;
+  gap: 0.08rem;
+  width: 100%;
+}
+
+.fp-pot-dial-btn .fp-pot-dial {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
 }
 
 .fp-pot-dial-btn.selected .fp-pot-dial {
@@ -1543,6 +1621,9 @@ button.fp-jack:hover {
 }
 
 .fp-galvo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   background: #6e7880;
   border: 1px solid #3a444c;
   padding: 0.25rem;

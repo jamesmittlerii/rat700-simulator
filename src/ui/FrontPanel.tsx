@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -21,8 +22,10 @@ import type {
 import { MACHINE_UNIT, portKey } from '../engine/types'
 import {
   AMP_STRIPS,
+  FG_COLS,
   FREE_DIODE_BLOCKS,
   FREE_DIODE_VERTICAL_PAIRS,
+  MULTIPLIER_BANKS,
   SWITCHABLE_BLOCKS,
   freeDiodeColPairs,
   freeDiodePairPointsRight,
@@ -51,12 +54,12 @@ const PANEL_BUTTONS: {
   label: string
   tone: 'green' | 'yellow' | 'red'
 }[] = [
-  { id: 'dauer', label: 'Dauerrechnen', tone: 'green' },
-  { id: 'einmal', label: 'Einmal Rechnen', tone: 'green' },
-  { id: 'fremd', label: 'Fremd', tone: 'green' },
-  { id: 'potSet', label: 'Pot. Einst.', tone: 'yellow' },
+  { id: 'dauer', label: 'Continuous', tone: 'green' },
+  { id: 'einmal', label: 'Single Run', tone: 'green' },
+  { id: 'fremd', label: 'External', tone: 'green' },
+  { id: 'potSet', label: 'Pot Set', tone: 'yellow' },
   { id: 'pause', label: 'Pause', tone: 'yellow' },
-  { id: 'halt', label: 'Halt', tone: 'red' },
+  { id: 'halt', label: 'Hold', tone: 'red' },
 ]
 
 interface FrontPanelProps {
@@ -152,27 +155,29 @@ export function FrontPanel({
               key={i}
               className={`fp-pot ${pot ? '' : 'empty'} ${selected ? 'selected' : ''} ${calibrating ? 'calibrating' : ''}`}
             >
-              <button
-                type="button"
-                className="fp-pot-channel"
-                disabled={!pot || !machine.powered}
-                title="Select for Pot. Einst. null-balance"
-                onClick={() => {
-                  if (!pot) return
-                  onSelect(pot.id)
-                  if (machine.mode === 'potSet') onCalibratePot(pot.id)
-                }}
-              >
-                {String(i + 1).padStart(2, '0')}
-              </button>
-              <PotDial
-                value={k}
-                disabled={!pot || !machine.powered}
-                selected={selected}
-                label={pot?.label ?? `Pot ${i + 1}`}
-                onSelect={() => pot && onSelect(pot.id)}
-                onChange={(v) => pot && onCoefficient(pot.id, v)}
-              />
+              <div className="fp-pot-face">
+                <button
+                  type="button"
+                  className="fp-pot-channel"
+                  disabled={!pot || !machine.powered}
+                  title="Select for Pot. Einst. null-balance"
+                  onClick={() => {
+                    if (!pot) return
+                    onSelect(pot.id)
+                    if (machine.mode === 'potSet') onCalibratePot(pot.id)
+                  }}
+                >
+                  {String(i + 1).padStart(2, '0')}
+                </button>
+                <PotDial
+                  value={k}
+                  disabled={!pot || !machine.powered}
+                  selected={selected}
+                  label={pot?.label ?? `Pot ${i + 1}`}
+                  onSelect={() => pot && onSelect(pot.id)}
+                  onChange={(v) => pot && onCoefficient(pot.id, v)}
+                />
+              </div>
             </div>
           )
         })}
@@ -717,7 +722,8 @@ function PatchBay({
           )}
         </svg>
         {/* Amp numbers between k and l — overlay grid so labels don't steal
-            auto-placed jack cells. */}
+            auto-placed jack cells. Mode Σ/∫ sit once in the center of each
+            4-jack Umschaltstecker block (not per hole). */}
         <div
           className="fp-amp-labels"
           aria-hidden
@@ -741,6 +747,68 @@ function PatchBay({
                 {String(strip.amp).padStart(2, '0')}
               </span>
             )
+          })}
+          {SWITCHABLE_BLOCKS.map((block) => {
+            const [left, right] = block.cols
+            const a = rowIndex('a')
+            const b = rowIndex('b')
+            const c = rowIndex('c')
+            return (
+              <Fragment key={`mode-silk-${block.amp}`}>
+                <span
+                  className="fp-mode-silk-label"
+                  style={{
+                    gridColumn: `${left} / ${right + 1}`,
+                    gridRow: `${a + 1} / ${b + 2}`,
+                  }}
+                >
+                  Σ
+                </span>
+                <span
+                  className="fp-mode-silk-label"
+                  style={{
+                    gridColumn: `${left} / ${right + 1}`,
+                    gridRow: `${b + 1} / ${c + 2}`,
+                  }}
+                >
+                  ∫
+                </span>
+              </Fragment>
+            )
+          })}
+          {(
+            [
+              ['F1', FG_COLS.F1],
+              ['F2', FG_COLS.F2],
+            ] as const
+          ).map(([name, col1]) => (
+            <span
+              key={`fg-silk-${name}`}
+              className="fp-fg-silk-label"
+              style={{
+                gridColumn: col1,
+                /* Span rows a–b so the label sits midway between the two jacks */
+                gridRow: `${rowIndex('a') + 1} / ${rowIndex('b') + 2}`,
+              }}
+            >
+              {name}
+            </span>
+          ))}
+          {MULTIPLIER_BANKS.flatMap((bank) => {
+            const [c0, c1] = bank.cols
+            const labels = ['+X', '+Y', '−X', '−Y'] as const
+            return labels.map((label, row) => (
+              <span
+                key={`mult-silk-${bank.index}-${label}`}
+                className="fp-mult-silk-label"
+                style={{
+                  gridColumn: `${c0} / ${c1 + 1}`,
+                  gridRow: row + 1,
+                }}
+              >
+                {label}
+              </span>
+            ))
           })}
         </div>
         <svg
