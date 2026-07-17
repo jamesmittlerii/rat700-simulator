@@ -42,7 +42,7 @@ import { loadDuffingOscillator, DUFFING_NODES } from './presets/duffingOscillato
 import { Controls } from './ui/Controls'
 import { FrontPanel } from './ui/FrontPanel'
 import { SchematicCanvas } from './ui/SchematicCanvas'
-import { XYScope } from './ui/XYScope'
+import { XYScope, type XYScopeHandle } from './ui/XYScope'
 import './App.css'
 
 const STORAGE_KEY = 'rat700-patch-v2'
@@ -84,8 +84,10 @@ export default function App() {
       : SCOPE_HEIGHT_DEFAULT
   })
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
+  // machineRef is the single source of truth for the live simulation; React
+  // state (`machine`) is a throttled mirror used only for rendering the UI.
   const machineRef = useRef(machine)
-  machineRef.current = machine
+  const scopeRef = useRef<XYScopeHandle>(null)
 
   const selectWorkspaceTab = useCallback((tab: WorkspaceTab) => {
     setWorkspaceTab(tab)
@@ -129,11 +131,12 @@ export default function App() {
 
   const setMachine = useCallback(
     (updater: MachineState | ((m: MachineState) => MachineState)) => {
-      setMachineState((m) => {
-        const next = typeof updater === 'function' ? updater(m) : updater
-        machineRef.current = next
-        return next
-      })
+      // Always derive from the live ref (not throttled React state) so edits
+      // during Operate never rewind the simulation.
+      const next =
+        typeof updater === 'function' ? updater(machineRef.current) : updater
+      machineRef.current = next
+      setMachineState(next)
     },
     [],
   )
@@ -141,6 +144,7 @@ export default function App() {
   useEffect(() => {
     let raf = 0
     let last = performance.now()
+    let lastFlush = last
     const tick = (now: number) => {
       const wallDt = Math.min(0.05, (now - last) / 1000)
       last = now
@@ -148,13 +152,20 @@ export default function App() {
       if (m.powered && m.mode === 'operate') {
         const next = stepMachine(m, wallDt, { captureScope: true })
         machineRef.current = next
-        setMachine(next)
+        // Draw the scope every frame (smooth trace) without re-rendering React.
+        scopeRef.current?.feed(next)
+        // Throttle the React mirror (sidebar/faceplate) to ~15 Hz, but flush
+        // immediately when the mode changes (e.g. overload auto-shutdown).
+        if (next.mode !== m.mode || now - lastFlush >= 66) {
+          lastFlush = now
+          setMachineState(next)
+        }
       }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [setMachine])
+  }, [])
 
   const onMode = useCallback(
     (mode: MachineMode) => {
@@ -336,7 +347,7 @@ export default function App() {
             aria-labelledby="tab-schematic"
           >
             <div className="readouts" style={{ height: scopeHeight }}>
-              <XYScope machine={machine} />
+              <XYScope ref={scopeRef} machine={machine} />
             </div>
             <div
               className="workspace-splitter"
@@ -371,6 +382,7 @@ export default function App() {
           >
             <FrontPanel
               machine={machine}
+              scopeRef={scopeRef}
               selectedId={selectedId}
               onSelect={setSelectedId}
               onPanelButton={onPanelButton}

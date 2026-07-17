@@ -1,9 +1,25 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react'
 import type { MachineState } from '../engine/circuit'
-import { hasXYScope, scopeChannelsFor } from '../scope/channels'
+import { hasXYScope, scopeChannelsFor, type ScopeChannel } from '../scope/channels'
 
 interface XYScopeProps {
   machine: MachineState
+}
+
+/**
+ * Imperative handle so the animation loop can push simulation frames straight
+ * to the canvas (`feed`) without forcing a React re-render of the whole app on
+ * every frame.
+ */
+export interface XYScopeHandle {
+  feed: (machine: MachineState) => void
 }
 
 type Pt = { x: number; y: number; t: number }
@@ -14,21 +30,24 @@ const PERSIST_ORBIT = 2.5
 const VOLTS_HALF_VEHICLE = 3.75
 const VOLTS_HALF_ORBIT = 11
 
+function persistFor(channels: ScopeChannel[], isVehicle: boolean): number {
+  return channels[0]?.persistSec ?? (isVehicle ? PERSIST_VEHICLE : PERSIST_ORBIT)
+}
+
 /** Shared phosphor X/Y oscilloscope for vehicle mux or single-trace orbits. */
-export function XYScope({ machine }: XYScopeProps) {
+export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
+  { machine },
+  ref,
+) {
   const buffers = useRef<Record<string, Pt[]>>({})
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const lastMode = useRef(machine.mode)
   const lastTime = useRef(-1)
+  // Latest measured canvas size, read imperatively so drawing never depends on
+  // a React render having flushed the state value.
+  const sizeRef = useRef({ w: 320, h: 170 })
   const [canvasSize, setCanvasSize] = useState({ w: 320, h: 170 })
-
-  const channels = scopeChannelsFor(machine.nodes)
-  const isVehicle = channels.some((c) => c.id === 'wheelL')
-  // Single-trace presets (Lorenz, Rössler, oscillators…) may carry their own
-  // phosphor persistence and a scope title on the first channel.
-  const persistSec =
-    channels[0]?.persistSec ?? (isVehicle ? PERSIST_VEHICLE : PERSIST_ORBIT)
 
   useEffect(() => {
     const el = wrapRef.current
@@ -38,60 +57,65 @@ export function XYScope({ machine }: XYScopeProps) {
       if (!cr) return
       const w = Math.max(160, Math.floor(cr.width))
       const h = Math.max(100, Math.floor(cr.height))
+      sizeRef.current = { w, h }
       setCanvasSize({ w, h })
     })
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
 
-  useEffect(() => {
-    if (channels.length === 0) return
-
+  /** Reset detection + phosphor accumulation (only while operating). */
+  const accumulate = useCallback((m: MachineState, channels: ScopeChannel[]) => {
     if (
-      (lastMode.current !== 'operate' && machine.mode === 'operate') ||
-      machine.time < lastTime.current
+      (lastMode.current !== 'operate' && m.mode === 'operate') ||
+      m.time < lastTime.current
     ) {
       buffers.current = {}
     }
-    lastMode.current = machine.mode
-    lastTime.current = machine.time
+    lastMode.current = m.mode
+    lastTime.current = m.time
 
-    const batch = machine.phosphorBatch
-    if (
-      machine.powered &&
-      machine.mode === 'operate' &&
-      batch &&
-      batch.length > 0
-    ) {
-      for (const sample of batch) {
-        for (const ch of channels) {
-          const pt = sample.channels[ch.id]
-          if (!pt) continue
-          const buf = buffers.current[ch.id] ?? []
-          buf.push({ x: pt.x, y: pt.y, t: sample.t })
-          buffers.current[ch.id] = buf
-        }
-      }
-      const cutoff = machine.time - persistSec
-      // Keep enough points that long-persist orbits (Lorenz/Duffing) aren't
-      // truncated before their persistence window elapses.
-      const maxPoints = persistSec > 4 ? 4000 : 800
-      for (const id of Object.keys(buffers.current)) {
-        const buf = buffers.current[id]!
-        while (buf.length > 0 && buf[0]!.t < cutoff) buf.shift()
-        if (buf.length > maxPoints) buf.splice(0, buf.length - maxPoints)
+    const batch = m.phosphorBatch
+    if (!(m.powered && m.mode === 'operate' && batch && batch.length > 0)) return
+
+    const isVehicle = channels.some((c) => c.id === 'wheelL')
+    const persistSec = persistFor(channels, isVehicle)
+    for (const sample of batch) {
+      for (const ch of channels) {
+        const pt = sample.channels[ch.id]
+        if (!pt) continue
+        const buf = buffers.current[ch.id] ?? []
+        buf.push({ x: pt.x, y: pt.y, t: sample.t })
+        buffers.current[ch.id] = buf
       }
     }
+    const cutoff = m.time - persistSec
+    // Keep enough points that long-persist orbits (Lorenz/Duffing) aren't
+    // truncated before their persistence window elapses.
+    const maxPoints = persistSec > 4 ? 4000 : 800
+    for (const id of Object.keys(buffers.current)) {
+      const buf = buffers.current[id]!
+      while (buf.length > 0 && buf[0]!.t < cutoff) buf.shift()
+      if (buf.length > maxPoints) buf.splice(0, buf.length - maxPoints)
+    }
+  }, [])
 
+  /** Render the current buffers to the canvas (no accumulation). */
+  const render = useCallback((m: MachineState, channels: ScopeChannel[]) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    const isVehicle = channels.some((c) => c.id === 'wheelL')
+    const persistSec = persistFor(channels, isVehicle)
+    const { w, h } = sizeRef.current
+
     const dpr = window.devicePixelRatio || 1
-    const w = canvasSize.w
-    const h = canvasSize.h
-    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+    if (
+      canvas.width !== Math.floor(w * dpr) ||
+      canvas.height !== Math.floor(h * dpr)
+    ) {
       canvas.width = Math.floor(w * dpr)
       canvas.height = Math.floor(h * dpr)
     }
@@ -124,7 +148,7 @@ export function XYScope({ machine }: XYScopeProps) {
     ctx.lineJoin = 'round'
     ctx.lineCap = 'round'
 
-    const now = machine.time
+    const now = m.time
     const lineW = Math.max(1.1, Math.min(w, h) / 140)
     for (const ch of channels) {
       const buf = buffers.current[ch.id]
@@ -156,8 +180,36 @@ export function XYScope({ machine }: XYScopeProps) {
       8,
       Math.max(14, h * 0.08),
     )
-    ctx.fillText(`t = ${machine.time.toFixed(2)} s`, 8, h - 8)
-  })
+    ctx.fillText(`t = ${m.time.toFixed(2)} s`, 8, h - 8)
+  }, [])
+
+  // Per-frame feed from the animation loop: accumulate + draw at 60 fps without
+  // re-rendering React.
+  useImperativeHandle(
+    ref,
+    () => ({
+      feed: (m: MachineState) => {
+        const channels = scopeChannelsFor(m.nodes)
+        if (channels.length === 0) return
+        accumulate(m, channels)
+        render(m, channels)
+      },
+    }),
+    [accumulate, render],
+  )
+
+  // Redraw on non-operate updates (preset load, reset, patch edits, resize).
+  // Operate frames are driven by feed() above, so skip them here.
+  useEffect(() => {
+    if (machine.mode === 'operate') return
+    const channels = scopeChannelsFor(machine.nodes)
+    if (channels.length === 0) return
+    accumulate(machine, channels)
+    render(machine, channels)
+  }, [machine, canvasSize, accumulate, render])
+
+  const channels = scopeChannelsFor(machine.nodes)
+  const isVehicle = channels.some((c) => c.id === 'wheelL')
 
   if (!hasXYScope(machine.nodes)) {
     return (
@@ -184,4 +236,4 @@ export function XYScope({ machine }: XYScopeProps) {
       </div>
     </div>
   )
-}
+})
