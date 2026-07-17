@@ -34,6 +34,7 @@ import {
   loadVehicleSuspension,
   VEHICLE_NODES,
 } from './presets/vehicleSuspension'
+import { loadLorenzAttractor, LORENZ_NODES } from './presets/lorenzAttractor'
 import { Controls } from './ui/Controls'
 import { FrontPanel } from './ui/FrontPanel'
 import { SchematicCanvas } from './ui/SchematicCanvas'
@@ -56,7 +57,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(VEHICLE_NODES.body)
   const [status, setStatus] = useState<string | undefined>()
   const [activePreset, setActivePreset] = useState<
-    'oscillator' | 'vehicle-firm' | 'vehicle-soft' | null
+    'oscillator' | 'vehicle-firm' | 'vehicle-soft' | 'lorenz' | null
   >('vehicle-firm')
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(() => {
     const raw = localStorage.getItem(WORKSPACE_TAB_KEY)
@@ -232,6 +233,12 @@ export default function App() {
               ? 'Loaded vehicle suspension (firm damping).'
               : 'Loaded vehicle suspension (soft damping — Caprice-style).',
           )
+        }}
+        onLoadLorenz={() => {
+          setMachine(loadLorenzAttractor())
+          setSelectedId(LORENZ_NODES.x)
+          setActivePreset('lorenz')
+          setStatus('Loaded Lorenz attractor preset — press Compute (Operate).')
         }}
         onSave={handleSave}
         onLoad={handleLoadSaved}

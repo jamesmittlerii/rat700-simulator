@@ -31,6 +31,7 @@ Patches save to `localStorage` key `rat700-patch-v2`.
 
 - **Harmonic oscillator** — two integrators + inverter + ω² pot; ∫ jumpers pre-placed; Operate draws a clean orbit.
 - **Vehicle suspension** — dual-mass quarter-car with road noise and analog figure generator (firm vs soft Caprice-style damp).
+- **Lorenz attractor** — the classic chaotic butterfly (σ=10, ρ=28, β=8/3) with three integrators and two quarter-square multipliers, amplitude-scaled onto the ±10 V machine unit; the scope shows the x–z projection.
 
 ## Engine (`src/engine/`)
 

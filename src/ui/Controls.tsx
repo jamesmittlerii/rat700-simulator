@@ -18,6 +18,7 @@ interface ControlsProps {
   onAdd: (kind: 'potentiometer' | 'summer' | 'integrator' | 'inverter') => void
   onLoadOscillator: () => void
   onLoadVehicle: (damping: 'firm' | 'soft') => void
+  onLoadLorenz: () => void
   onSave: () => void
   onLoad: () => void
   onClear: () => void
@@ -25,7 +26,7 @@ interface ControlsProps {
   onIC: (id: string, v: number) => void
   onSignal: (id: string, params: { amplitude?: number; frequency?: number }) => void
   onDeleteSelected: () => void
-  activePreset?: 'oscillator' | 'vehicle-firm' | 'vehicle-soft' | null
+  activePreset?: 'oscillator' | 'vehicle-firm' | 'vehicle-soft' | 'lorenz' | null
   status?: string
 }
 
@@ -39,6 +40,7 @@ export function Controls({
   onAdd,
   onLoadOscillator,
   onLoadVehicle,
+  onLoadLorenz,
   onSave,
   onLoad,
   onClear,
@@ -156,6 +158,13 @@ export function Controls({
             onClick={() => onLoadVehicle('soft')}
           >
             Vehicle (soft damp)
+          </button>
+          <button
+            type="button"
+            className={activePreset === 'lorenz' ? 'btn primary' : 'btn'}
+            onClick={onLoadLorenz}
+          >
+            Lorenz attractor
           </button>
           <button type="button" className="btn" onClick={onSave}>
             Save patch
