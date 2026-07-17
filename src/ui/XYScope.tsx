@@ -30,8 +30,19 @@ const PERSIST_ORBIT = 2.5
 const VOLTS_HALF_VEHICLE = 3.75
 const VOLTS_HALF_ORBIT = 11
 
-function persistFor(channels: ScopeChannel[], isVehicle: boolean): number {
-  return channels[0]?.persistSec ?? (isVehicle ? PERSIST_VEHICLE : PERSIST_ORBIT)
+/**
+ * Phosphor window in machine seconds. Channel `persistSec` is defined at 1×;
+ * multiply by timeScale so speeding the wall→machine knob keeps the same
+ * wall-clock trail length (and denser equation history at higher scales).
+ */
+function persistFor(
+  channels: ScopeChannel[],
+  isVehicle: boolean,
+  timeScale: number,
+): number {
+  const base =
+    channels[0]?.persistSec ?? (isVehicle ? PERSIST_VEHICLE : PERSIST_ORBIT)
+  return base * Math.max(0.05, timeScale)
 }
 
 /** Shared phosphor X/Y oscilloscope for vehicle mux or single-trace orbits. */
@@ -81,7 +92,7 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
     if (!(m.powered && m.mode === 'operate' && batch && batch.length > 0)) return
 
     const isVehicle = channels.some((c) => c.id === 'wheelL')
-    const persistSec = persistFor(channels, isVehicle)
+    const persistSec = persistFor(channels, isVehicle, m.timeScale)
     for (const sample of batch) {
       for (const ch of channels) {
         const pt = sample.channels[ch.id]
@@ -94,7 +105,7 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
     const cutoff = m.time - persistSec
     // Keep enough points that long-persist orbits (Lorenz/Duffing) aren't
     // truncated before their persistence window elapses.
-    const maxPoints = persistSec > 4 ? 4000 : 800
+    const maxPoints = Math.min(8000, Math.max(800, Math.ceil(persistSec * 500)))
     for (const id of Object.keys(buffers.current)) {
       const buf = buffers.current[id]!
       while (buf.length > 0 && buf[0]!.t < cutoff) buf.shift()
@@ -110,7 +121,7 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
     if (!ctx) return
 
     const isVehicle = channels.some((c) => c.id === 'wheelL')
-    const persistSec = persistFor(channels, isVehicle)
+    const persistSec = persistFor(channels, isVehicle, m.timeScale)
     const { w, h } = sizeRef.current
 
     const dpr = window.devicePixelRatio || 1
@@ -192,10 +203,12 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
     ctx.fillStyle = '#2a8f55'
     const fontPx = Math.max(10, Math.round(h / 28))
     ctx.font = `${fontPx}px IBM Plex Sans, monospace`
+    const persistLabel =
+      persistSec >= 10 ? persistSec.toFixed(0) : persistSec.toFixed(1)
     ctx.fillText(
       isVehicle
-        ? `X/Y mux · draw ~16 Hz · persist ${persistSec}s`
-        : `${channels[0]?.label ?? 'X/Y orbit'} · persist ${persistSec}s`,
+        ? `X/Y mux · draw ~16 Hz · persist ${persistLabel}s`
+        : `${channels[0]?.label ?? 'X/Y orbit'} · persist ${persistLabel}s`,
       8,
       Math.max(14, h * 0.08),
     )

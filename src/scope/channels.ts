@@ -21,7 +21,10 @@ export interface ScopeChannel {
    */
   yAddNodes?: readonly string[]
   yAddScale?: number
-  /** Optional phosphor persistence (s) for this trace. */
+  /**
+   * Optional phosphor persistence at timeScale 1× (machine seconds).
+   * The scope multiplies by the live timeScale so trail length tracks the knob.
+   */
   persistSec?: number
   /** Optional scope header title. */
   title?: string
