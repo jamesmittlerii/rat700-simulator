@@ -1,6 +1,10 @@
 import type { CircuitNode } from '../engine/types'
 import { VEHICLE_SCOPE_CHANNELS } from '../presets/vehicleSuspension'
 import { LORENZ_SCOPE_CHANNELS } from '../presets/lorenzAttractor'
+import { ROSSLER_SCOPE_CHANNELS } from '../presets/rosslerAttractor'
+import { VAN_DER_POL_SCOPE_CHANNELS } from '../presets/vanDerPol'
+import { MATHIEU_SCOPE_CHANNELS } from '../presets/mathieuEquation'
+import { DUFFING_SCOPE_CHANNELS } from '../presets/duffingOscillator'
 
 export interface ScopeChannel {
   id: string
@@ -17,6 +21,10 @@ export interface ScopeChannel {
    */
   yAddNodes?: readonly string[]
   yAddScale?: number
+  /** Optional phosphor persistence (s) for this trace. */
+  persistSec?: number
+  /** Optional scope header title. */
+  title?: string
 }
 
 /** Harmonic oscillator: X/Y orbit from the two integrators. */
@@ -36,6 +44,18 @@ export function scopeChannelsFor(nodes: CircuitNode[]): ScopeChannel[] {
   }
   if (ids.has('lorenz_x') && ids.has('lorenz_z')) {
     return [...LORENZ_SCOPE_CHANNELS]
+  }
+  if (ids.has('ross_x') && ids.has('ross_y')) {
+    return [...ROSSLER_SCOPE_CHANNELS]
+  }
+  if (ids.has('vdp_x') && ids.has('vdp_v')) {
+    return [...VAN_DER_POL_SCOPE_CHANNELS]
+  }
+  if (ids.has('mathieu_x') && ids.has('mathieu_v')) {
+    return [...MATHIEU_SCOPE_CHANNELS]
+  }
+  if (ids.has('duffing_x') && ids.has('duffing_v')) {
+    return [...DUFFING_SCOPE_CHANNELS]
   }
   if (ids.has('int_1') && ids.has('int_2')) {
     return OSCILLATOR_SCOPE_CHANNELS

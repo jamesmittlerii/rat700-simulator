@@ -32,6 +32,10 @@ Patches save to `localStorage` key `rat700-patch-v2`.
 - **Harmonic oscillator** — two integrators + inverter + ω² pot; ∫ jumpers pre-placed; Operate draws a clean orbit.
 - **Vehicle suspension** — dual-mass quarter-car with road noise and analog figure generator (firm vs soft Caprice-style damp).
 - **Lorenz attractor** — the classic chaotic butterfly (σ=10, ρ=28, β=8/3) with three integrators and two quarter-square multipliers, amplitude-scaled onto the ±10 V machine unit; the scope shows the x–z projection.
+- **Rössler attractor** — the "folded ribbon" chaos (a=b=0.2, c=5.7) with a single x·z multiplier; scope shows the x–y spiral.
+- **Van der Pol** — non-linear damping (μ=2) that converges to a limit cycle; scope shows the x–ẋ phase portrait.
+- **Mathieu equation** — parametric pendulum ẍ + [a − 2q·cos 2t]x = 0 in a stable band; scope traces bounded precessing rings (x vs ẋ).
+- **Duffing oscillator** — forced double-well beam (β=−1, α=1, δ=0.25, γ=0.4, ω=1) that snaps between wells; scope shows the x–ẋ portrait.
 
 ## Engine (`src/engine/`)
 

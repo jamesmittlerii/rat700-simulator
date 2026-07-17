@@ -19,6 +19,10 @@ interface ControlsProps {
   onLoadOscillator: () => void
   onLoadVehicle: (damping: 'firm' | 'soft') => void
   onLoadLorenz: () => void
+  onLoadRossler: () => void
+  onLoadVanDerPol: () => void
+  onLoadMathieu: () => void
+  onLoadDuffing: () => void
   onSave: () => void
   onLoad: () => void
   onClear: () => void
@@ -26,7 +30,16 @@ interface ControlsProps {
   onIC: (id: string, v: number) => void
   onSignal: (id: string, params: { amplitude?: number; frequency?: number }) => void
   onDeleteSelected: () => void
-  activePreset?: 'oscillator' | 'vehicle-firm' | 'vehicle-soft' | 'lorenz' | null
+  activePreset?:
+    | 'oscillator'
+    | 'vehicle-firm'
+    | 'vehicle-soft'
+    | 'lorenz'
+    | 'rossler'
+    | 'vanDerPol'
+    | 'mathieu'
+    | 'duffing'
+    | null
   status?: string
 }
 
@@ -41,6 +54,10 @@ export function Controls({
   onLoadOscillator,
   onLoadVehicle,
   onLoadLorenz,
+  onLoadRossler,
+  onLoadVanDerPol,
+  onLoadMathieu,
+  onLoadDuffing,
   onSave,
   onLoad,
   onClear,
@@ -165,6 +182,34 @@ export function Controls({
             onClick={onLoadLorenz}
           >
             Lorenz attractor
+          </button>
+          <button
+            type="button"
+            className={activePreset === 'rossler' ? 'btn primary' : 'btn'}
+            onClick={onLoadRossler}
+          >
+            Rössler attractor
+          </button>
+          <button
+            type="button"
+            className={activePreset === 'vanDerPol' ? 'btn primary' : 'btn'}
+            onClick={onLoadVanDerPol}
+          >
+            Van der Pol
+          </button>
+          <button
+            type="button"
+            className={activePreset === 'mathieu' ? 'btn primary' : 'btn'}
+            onClick={onLoadMathieu}
+          >
+            Mathieu equation
+          </button>
+          <button
+            type="button"
+            className={activePreset === 'duffing' ? 'btn primary' : 'btn'}
+            onClick={onLoadDuffing}
+          >
+            Duffing oscillator
           </button>
           <button type="button" className="btn" onClick={onSave}>
             Save patch
