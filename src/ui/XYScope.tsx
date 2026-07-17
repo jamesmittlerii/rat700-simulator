@@ -10,6 +10,8 @@ type Pt = { x: number; y: number; t: number }
 
 const PERSIST_VEHICLE = 0.28
 const PERSIST_ORBIT = 2.5
+/** Longer phosphor so the chaotic Lorenz orbit fills in both wings. */
+const PERSIST_LORENZ = 8
 /** Volts visible across half-width / half-height at baseline size. */
 const VOLTS_HALF_VEHICLE = 3.75
 const VOLTS_HALF_ORBIT = 11
@@ -25,7 +27,12 @@ export function XYScope({ machine }: XYScopeProps) {
 
   const channels = scopeChannelsFor(machine.nodes)
   const isVehicle = channels.some((c) => c.id === 'wheelL')
-  const persistSec = isVehicle ? PERSIST_VEHICLE : PERSIST_ORBIT
+  const isLorenz = channels.some((c) => c.id === 'lorenzXZ')
+  const persistSec = isVehicle
+    ? PERSIST_VEHICLE
+    : isLorenz
+      ? PERSIST_LORENZ
+      : PERSIST_ORBIT
 
   useEffect(() => {
     const el = wrapRef.current
@@ -70,10 +77,12 @@ export function XYScope({ machine }: XYScopeProps) {
         }
       }
       const cutoff = machine.time - persistSec
+      // Keep enough points that the long-persist Lorenz orbit isn't truncated.
+      const maxPoints = isLorenz ? 4000 : 800
       for (const id of Object.keys(buffers.current)) {
         const buf = buffers.current[id]!
         while (buf.length > 0 && buf[0]!.t < cutoff) buf.shift()
-        if (buf.length > 800) buf.splice(0, buf.length - 800)
+        if (buf.length > maxPoints) buf.splice(0, buf.length - maxPoints)
       }
     }
 
@@ -146,7 +155,9 @@ export function XYScope({ machine }: XYScopeProps) {
     ctx.fillText(
       isVehicle
         ? `X/Y mux · draw ~16 Hz · persist ${persistSec}s`
-        : `X/Y orbit · x=Int1  y=Int2 · persist ${persistSec}s`,
+        : isLorenz
+          ? `Lorenz butterfly · x–z · persist ${persistSec}s`
+          : `X/Y orbit · x=Int1  y=Int2 · persist ${persistSec}s`,
       8,
       Math.max(14, h * 0.08),
     )
@@ -166,7 +177,9 @@ export function XYScope({ machine }: XYScopeProps) {
       <div className="vehicle-label">
         {isVehicle
           ? 'X/Y scope (mux) — cos/sin · FG body · RG-1 road'
-          : 'X/Y scope — harmonic oscillator orbit'}
+          : isLorenz
+            ? 'X/Y scope — Lorenz attractor (x–z butterfly)'
+            : 'X/Y scope — harmonic oscillator orbit'}
       </div>
       <div className="vehicle-canvas-wrap" ref={wrapRef}>
         <canvas

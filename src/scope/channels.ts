@@ -1,5 +1,6 @@
 import type { CircuitNode } from '../engine/types'
 import { VEHICLE_SCOPE_CHANNELS } from '../presets/vehicleSuspension'
+import { LORENZ_SCOPE_CHANNELS } from '../presets/lorenzAttractor'
 
 export interface ScopeChannel {
   id: string
@@ -25,12 +26,16 @@ export const OSCILLATOR_SCOPE_CHANNELS: ScopeChannel[] = [
 
 /**
  * Pick X/Y mux channels for the current patch.
- * Vehicle figure generator wins when present; else classic oscillator orbit.
+ * Vehicle figure generator wins when present; then Lorenz butterfly; else the
+ * classic oscillator orbit.
  */
 export function scopeChannelsFor(nodes: CircuitNode[]): ScopeChannel[] {
   const ids = new Set(nodes.map((n) => n.id))
   if (ids.has('sum_xL') && ids.has('sum_yw')) {
     return [...VEHICLE_SCOPE_CHANNELS]
+  }
+  if (ids.has('lorenz_x') && ids.has('lorenz_z')) {
+    return [...LORENZ_SCOPE_CHANNELS]
   }
   if (ids.has('int_1') && ids.has('int_2')) {
     return OSCILLATOR_SCOPE_CHANNELS
