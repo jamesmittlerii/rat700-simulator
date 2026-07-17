@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import { portsFor } from '../engine/elements'
 import type { MachineState } from '../engine/circuit'
 import type { PortRef } from '../engine/types'
@@ -47,7 +47,45 @@ function jackPosition(
   return { x, y }
 }
 
-export function SchematicCanvas({
+/** Patch structure only — ignores live integrator state / lastEval churn. */
+function schematicLayoutKey(machine: MachineState): string {
+  const nodes = machine.nodes
+    .map(
+      (n) =>
+        `${n.kind}:${n.id}:${n.label}:${n.x}:${n.y}:${n.coefficient ?? ''}:${n.voltage ?? ''}:${n.timeFactor ?? ''}`,
+    )
+    .join('|')
+  const cables = machine.cables
+    .map(
+      (c) =>
+        `${c.id}:${c.from.nodeId}.${c.from.port}>${c.to.nodeId}.${c.to.port}`,
+    )
+    .join(',')
+  return `${nodes}#${cables}`
+}
+
+/**
+ * Skip re-renders while operating when only machine time / voltages changed.
+ * Callback identity is ignored — parents often pass inline arrows that close
+ * over a stable setMachine.
+ */
+function schematicPropsAreEqual(
+  prev: SchematicCanvasProps,
+  next: SchematicCanvasProps,
+): boolean {
+  if (prev.selectedId !== next.selectedId) return false
+  if (prev.machine.powered !== next.machine.powered) return false
+  if (prev.machine.mode !== next.machine.mode) return false
+  if (schematicLayoutKey(prev.machine) !== schematicLayoutKey(next.machine)) {
+    return false
+  }
+  // Live run: structure unchanged → keep the SVG tree frozen so the ~15 Hz
+  // React mirror cannot starve the scope's rAF loop (~14 fps symptom).
+  if (next.machine.mode === 'operate' && next.machine.powered) return true
+  return prev.machine.lastEval === next.machine.lastEval
+}
+
+function SchematicCanvasImpl({
   machine,
   selectedId,
   onSelect,
@@ -76,6 +114,9 @@ export function SchematicCanvas({
     return { x: p.x, y: p.y }
   }, [])
 
+  // machine.nodes gets a fresh array every sim step; key the jack map on
+  // structure + positions only (same idea as FrontPanel's patch layoutKey).
+  const layoutKey = schematicLayoutKey(machine)
   const jackMap = useMemo(() => {
     const map = new Map<string, { x: number; y: number }>()
     for (const n of machine.nodes) {
@@ -87,7 +128,8 @@ export function SchematicCanvas({
       }
     }
     return map
-  }, [machine.nodes])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- layoutKey covers structural deps
+  }, [layoutKey])
 
   const onPointerMove = (e: React.PointerEvent) => {
     const pos = toSvg(e.clientX, e.clientY)
@@ -257,3 +299,5 @@ export function SchematicCanvas({
     </svg>
   )
 }
+
+export const SchematicCanvas = memo(SchematicCanvasImpl, schematicPropsAreEqual)

@@ -149,30 +149,46 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
 
     ctx.lineJoin = 'round'
     ctx.lineCap = 'round'
+    ctx.lineWidth = Math.max(1.1, Math.min(w, h) / 140)
 
+    // Phosphor fade in a few alpha bands (one stroke each) instead of a
+    // shadowBlur + stroke per segment — that path was ~O(points) GPU work and
+    // crushed complex-orbit presets on modest CPUs.
+    const BANDS = 6
     const now = m.time
-    const lineW = Math.max(1.1, Math.min(w, h) / 140)
     for (const ch of channels) {
       const buf = buffers.current[ch.id]
       if (!buf || buf.length < 2) continue
-      const stride = buf.length > 400 ? 2 : 1
-      for (let i = stride; i < buf.length; i += stride) {
-        const a = buf[i - stride]!
-        const b = buf[i]!
-        const age = now - b.t
-        const alpha = Math.max(0.06, 1 - age / persistSec)
+      const stride = buf.length > 1200 ? 4 : buf.length > 500 ? 2 : 1
+      for (let band = 0; band < BANDS; band++) {
+        const lo = band / BANDS
+        const hi = (band + 1) / BANDS
+        const alpha = Math.max(0.08, 1 - (lo + hi) / 2)
         ctx.strokeStyle = `rgba(57, 255, 122, ${alpha.toFixed(3)})`
-        ctx.shadowColor = `rgba(57, 255, 122, ${(alpha * 0.35).toFixed(3)})`
-        ctx.shadowBlur = 2.5
-        ctx.lineWidth = lineW
         ctx.beginPath()
-        ctx.moveTo(cx + a.x * px, cy - a.y * px)
-        ctx.lineTo(cx + b.x * px, cy - b.y * px)
+        let drawing = false
+        for (let i = stride; i < buf.length; i += stride) {
+          const b = buf[i]!
+          const ageNorm = (now - b.t) / persistSec
+          if (ageNorm < lo || ageNorm >= hi) {
+            drawing = false
+            continue
+          }
+          const a = buf[i - stride]!
+          const x0 = cx + a.x * px
+          const y0 = cy - a.y * px
+          const x1 = cx + b.x * px
+          const y1 = cy - b.y * px
+          if (!drawing) {
+            ctx.moveTo(x0, y0)
+            drawing = true
+          }
+          ctx.lineTo(x1, y1)
+        }
         ctx.stroke()
       }
     }
 
-    ctx.shadowBlur = 0
     ctx.fillStyle = '#2a8f55'
     const fontPx = Math.max(10, Math.round(h / 28))
     ctx.font = `${fontPx}px IBM Plex Sans, monospace`
