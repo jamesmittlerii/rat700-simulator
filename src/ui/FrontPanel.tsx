@@ -46,7 +46,7 @@ import {
   type PatchCell,
 } from './patchLayout'
 import { buildSilkTies, buildSilkSectionLines } from './silkTies'
-import { XYScope, type XYScopeHandle } from './XYScope'
+import { XYScope, type PhosphorQuality, type XYScopeHandle } from './XYScope'
 
 const CABLE_COLORS = ['#c45c26', '#2a6f97', '#2d6a4f', '#7b2d8e', '#b08968']
 
@@ -79,6 +79,7 @@ interface FrontPanelProps {
   readonly onAutoShutdown: (on: boolean) => void
   readonly onFgBreakpoint: (nodeId: string, index: number, y: number) => void
   readonly scopeRef?: Ref<XYScopeHandle>
+  readonly phosphorQuality?: PhosphorQuality
 }
 
 export function FrontPanel({
@@ -97,6 +98,7 @@ export function FrontPanel({
   onAutoShutdown,
   onFgBreakpoint,
   scopeRef,
+  phosphorQuality = 'fast',
 }: FrontPanelProps) {
   const pots = useMemo(
     () =>
@@ -243,7 +245,11 @@ export function FrontPanel({
             ))}
           </fieldset>
           <div className="fp-scope-slot">
-            <XYScope ref={scopeRef} machine={machine} />
+            <XYScope
+              ref={scopeRef}
+              machine={machine}
+              phosphorQuality={phosphorQuality}
+            />
           </div>
         </aside>
       </div>

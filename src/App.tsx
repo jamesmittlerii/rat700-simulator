@@ -42,17 +42,22 @@ import { loadDuffingOscillator, DUFFING_NODES } from './presets/duffingOscillato
 import { Controls } from './ui/Controls'
 import { FrontPanel } from './ui/FrontPanel'
 import { SchematicCanvas } from './ui/SchematicCanvas'
-import { XYScope, type XYScopeHandle } from './ui/XYScope'
+import { XYScope, type PhosphorQuality, type XYScopeHandle } from './ui/XYScope'
 import './App.css'
 
 const STORAGE_KEY = 'rat700-patch-v2'
 const SCOPE_HEIGHT_KEY = 'rat700-scope-height'
 const WORKSPACE_TAB_KEY = 'rat700-workspace-tab'
+const PHOSPHOR_QUALITY_KEY = 'rat700-phosphor-quality'
 const SCOPE_HEIGHT_DEFAULT = 220
 const SCOPE_HEIGHT_MIN = 140
 const SCOPE_HEIGHT_MAX = 560
 
 type WorkspaceTab = 'schematic' | 'frontPanel'
+
+function loadPhosphorQuality(): PhosphorQuality {
+  return localStorage.getItem(PHOSPHOR_QUALITY_KEY) === 'glow' ? 'glow' : 'fast'
+}
 
 export default function App() {
   const [machine, setMachine] = useState<MachineState>(() =>
@@ -83,6 +88,9 @@ export default function App() {
       ? Math.min(SCOPE_HEIGHT_MAX, Math.max(SCOPE_HEIGHT_MIN, n))
       : SCOPE_HEIGHT_DEFAULT
   })
+  const [phosphorQuality, setPhosphorQuality] = useState<PhosphorQuality>(
+    loadPhosphorQuality,
+  )
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
   // machineRef is the single source of truth for the live simulation; React
   // state (`machine`) is a throttled mirror used only for rendering the UI.
@@ -92,6 +100,11 @@ export default function App() {
   const selectWorkspaceTab = useCallback((tab: WorkspaceTab) => {
     setWorkspaceTab(tab)
     localStorage.setItem(WORKSPACE_TAB_KEY, tab)
+  }, [])
+
+  const onPhosphorQuality = useCallback((q: PhosphorQuality) => {
+    setPhosphorQuality(q)
+    localStorage.setItem(PHOSPHOR_QUALITY_KEY, q)
   }, [])
 
   const onSplitterPointerDown = useCallback(
@@ -239,6 +252,8 @@ export default function App() {
         onMode={onMode}
         onPower={(on) => commitMachine((m) => ({ ...m, powered: on }))}
         onTimeScale={(v) => commitMachine((m) => ({ ...m, timeScale: v }))}
+        phosphorQuality={phosphorQuality}
+        onPhosphorQuality={onPhosphorQuality}
         onReset={() => commitMachine((m) => resetTime(m))}
         onAdd={onAdd}
         onLoadOscillator={() => {
@@ -347,7 +362,11 @@ export default function App() {
             aria-labelledby="tab-schematic"
           >
             <div className="readouts" style={{ height: scopeHeight }}>
-              <XYScope ref={scopeRef} machine={machine} />
+              <XYScope
+                ref={scopeRef}
+                machine={machine}
+                phosphorQuality={phosphorQuality}
+              />
             </div>
             <hr
               className="workspace-splitter"
@@ -382,6 +401,7 @@ export default function App() {
             <FrontPanel
               machine={machine}
               scopeRef={scopeRef}
+              phosphorQuality={phosphorQuality}
               selectedId={selectedId}
               onSelect={setSelectedId}
               onPanelButton={onPanelButton}

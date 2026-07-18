@@ -1,5 +1,6 @@
 import type { MachineMode } from '../engine/types'
 import type { MachineState } from '../engine/circuit'
+import type { PhosphorQuality } from './XYScope'
 
 const MODE_LABELS: Record<MachineMode, string> = {
   potSet: 'Pot. Set',
@@ -14,6 +15,8 @@ interface ControlsProps {
   readonly onMode: (mode: MachineMode) => void
   readonly onPower: (on: boolean) => void
   readonly onTimeScale: (v: number) => void
+  readonly phosphorQuality: PhosphorQuality
+  readonly onPhosphorQuality: (q: PhosphorQuality) => void
   readonly onReset: () => void
   readonly onAdd: (kind: 'potentiometer' | 'summer' | 'integrator' | 'inverter') => void
   readonly onLoadOscillator: () => void
@@ -49,6 +52,8 @@ export function Controls({
   onMode,
   onPower,
   onTimeScale,
+  phosphorQuality,
+  onPhosphorQuality,
   onReset,
   onAdd,
   onLoadOscillator,
@@ -126,6 +131,33 @@ export function Controls({
         <button type="button" className="btn" onClick={onReset}>
           Reset to IC
         </button>
+      </section>
+
+      <section>
+        <h2>Scope trail</h2>
+        <div className="mode-grid">
+          <button
+            type="button"
+            className={
+              phosphorQuality === 'fast' ? 'btn mode active' : 'btn mode'
+            }
+            onClick={() => onPhosphorQuality('fast')}
+          >
+            Fast
+          </button>
+          <button
+            type="button"
+            className={
+              phosphorQuality === 'glow' ? 'btn mode active' : 'btn mode'
+            }
+            onClick={() => onPhosphorQuality('glow')}
+          >
+            Glow
+          </button>
+        </div>
+        <p className="hint">
+          Fast = banded polylines. Glow = classic per-segment blur (heavier).
+        </p>
       </section>
 
       <section>
