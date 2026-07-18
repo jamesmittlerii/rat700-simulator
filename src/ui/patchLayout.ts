@@ -370,14 +370,18 @@ function placeAmpInputs(
   placeSummerIntegratorInputs(place, amp, leftCol, tag, ampNumber, ports)
 }
 
-function placeIntegratorTray(
-  place: PlaceFn,
-  amp: CircuitNode,
-  leftCol: number,
-  rightCol: number,
-  tag: string,
-  ampNumber: number,
-): void {
+/** Shared amp-strip placement context (keeps helper arity ≤7 for Sonar). */
+type AmpStripCtx = {
+  place: PlaceFn
+  amp: CircuitNode
+  leftCol: number
+  rightCol: number
+  tag: string
+  ampNumber: number
+}
+
+function placeIntegratorTray(ctx: AmpStripCtx): void {
+  const { place, amp, leftCol, rightCol, tag, ampNumber } = ctx
   const icRef = { nodeId: amp.id, port: 'ic' }
   const aRow = rowIndex('l')
   if (!isFreeDiodeCell(leftCol, aRow)) {
@@ -399,15 +403,11 @@ function placeIntegratorTray(
 }
 
 function placeSummerTray(
-  place: PlaceFn,
-  amp: CircuitNode,
-  leftCol: number,
-  rightCol: number,
+  ctx: AmpStripCtx,
   trayAuxRow: number,
-  tag: string,
-  ampNumber: number,
   ports: PortDef[],
 ): void {
+  const { place, amp, leftCol, rightCol, tag, ampNumber } = ctx
   if (
     ports.some((x) => x.name === 'r') &&
     !isFreeDiodeCell(leftCol, trayAuxRow)
@@ -443,54 +443,35 @@ function placeSummerTray(
 }
 
 function placeAmpTrayAux(
-  place: PlaceFn,
-  amp: CircuitNode,
-  leftCol: number,
-  rightCol: number,
-  trayAuxRow: number,
-  traySplit: boolean,
-  tag: string,
-  ampNumber: number,
+  ctx: AmpStripCtx,
+  tray: { aux: number; split: boolean },
   ports: PortDef[],
 ): void {
   // Tray IC/R/G/Out — prefer rows l/m; skip freie Dioden fields.
-  if (amp.kind === 'integrator') {
-    placeIntegratorTray(place, amp, leftCol, rightCol, tag, ampNumber)
+  if (ctx.amp.kind === 'integrator') {
+    placeIntegratorTray(ctx)
     return
   }
-  if (amp.kind === 'summer' && !traySplit) {
-    placeSummerTray(
-      place,
-      amp,
-      leftCol,
-      rightCol,
-      trayAuxRow,
-      tag,
-      ampNumber,
-      ports,
-    )
+  if (ctx.amp.kind === 'summer' && !tray.split) {
+    placeSummerTray(ctx, tray.aux, ports)
   }
 }
 
 function placeAmpTrayOuts(
-  place: PlaceFn,
-  leftCol: number,
-  rightCol: number,
-  trayOutRow: number,
-  traySplit: boolean,
-  tag: string,
+  ctx: AmpStripCtx,
+  tray: { out: number; split: boolean },
   outRef: PortRef,
-  ampNumber: number,
 ): void {
   // Tray row m: paralleled red outs when the cell is not a pot wiper column.
   // Pot sections share cols with amp strips; wipers keep row m there.
   // Amp-output mults remain on the right-column e–k / g–k band.
-  if (traySplit) return
+  if (tray.split) return
+  const { place, leftCol, rightCol, tag, ampNumber } = ctx
   for (const col1 of [leftCol, rightCol]) {
-    if (isFreeDiodeCell(col1, trayOutRow)) continue
+    if (isFreeDiodeCell(col1, tray.out)) continue
     if ((POT_COLS as readonly number[]).includes(col1)) continue
     place(
-      cell(col1, trayOutRow, 'red', `${tag} Out`, outRef, 'out', {
+      cell(col1, tray.out, 'red', `${tag} Out`, outRef, 'out', {
         ampNumber,
       }),
     )
@@ -512,33 +493,21 @@ function placeSlottedAmp(
 ): void {
   const tag = String(ampNumber).padStart(2, '0')
   const ports = portsFor(amp.kind, amp)
-  const { aux: trayAuxRow, out: trayOutRow, split: traySplit } =
-    ampTrayRows(leftCol, rightCol)
+  const tray = ampTrayRows(leftCol, rightCol)
   const outRef = { nodeId: amp.id, port: 'out' }
-
-  placeAmpOutputMults(place, rightCol, tag, outRef, ampNumber)
-  placeAmpInputs(place, amp, leftCol, tag, ampNumber, ports)
-  placeAmpTrayAux(
+  const ctx: AmpStripCtx = {
     place,
     amp,
     leftCol,
     rightCol,
-    trayAuxRow,
-    traySplit,
     tag,
     ampNumber,
-    ports,
-  )
-  placeAmpTrayOuts(
-    place,
-    leftCol,
-    rightCol,
-    trayOutRow,
-    traySplit,
-    tag,
-    outRef,
-    ampNumber,
-  )
+  }
+
+  placeAmpOutputMults(place, rightCol, tag, outRef, ampNumber)
+  placeAmpInputs(place, amp, leftCol, tag, ampNumber, ports)
+  placeAmpTrayAux(ctx, { aux: tray.aux, split: tray.split }, ports)
+  placeAmpTrayOuts(ctx, { out: tray.out, split: tray.split }, outRef)
 }
 
 function freeOverflowKeys(
@@ -558,18 +527,23 @@ function freeOverflowKeys(
   return out
 }
 
+type OverflowClaimCtx = {
+  place: PlaceFn
+  grid: Map<string, PatchCell>
+  isReservedSilk: ReservedFn
+  amp: CircuitNode
+  ampNumber: number
+  ports: PortDef[]
+  tag: string
+}
+
 function claimOverflowPort(
-  place: PlaceFn,
-  grid: Map<string, PatchCell>,
-  isReservedSilk: ReservedFn,
-  amp: CircuitNode,
-  ampNumber: number,
-  ports: PortDef[],
-  tag: string,
+  ctx: OverflowClaimCtx,
   portName: string,
   dir: PortDirection,
   color: JackColor,
 ): void {
+  const { place, grid, isReservedSilk, amp, ampNumber, ports, tag } = ctx
   const p = ports.find((x) => x.name === portName)
   if (!p) return
   const spot = freeOverflowKeys(grid, isReservedSilk)[0]
@@ -597,25 +571,20 @@ function placeOverflowAmp(
 ): void {
   // Overflow multi-chassis amps → free cells scanned bottom-up
   // (rows a–d stay reserved for white config silk)
-  const tag = String(ampNumber).padStart(2, '0')
-  const ports = portsFor(amp.kind, amp)
+  const ctx: OverflowClaimCtx = {
+    place,
+    grid,
+    isReservedSilk,
+    amp,
+    ampNumber,
+    ports: portsFor(amp.kind, amp),
+    tag: String(ampNumber).padStart(2, '0'),
+  }
   const claim = (
     portName: string,
     dir: PortDirection,
     color: JackColor,
-  ) =>
-    claimOverflowPort(
-      place,
-      grid,
-      isReservedSilk,
-      amp,
-      ampNumber,
-      ports,
-      tag,
-      portName,
-      dir,
-      color,
-    )
+  ) => claimOverflowPort(ctx, portName, dir, color)
 
   if (amp.kind === 'inverter') {
     claim('in', 'in', 'green')
@@ -1030,16 +999,26 @@ function placeComparators(forcePlace: PlaceFn): void {
   }
 }
 
+type PeripheralPlaceCtx = {
+  place: PlaceFn
+  forcePlace: PlaceFn
+  grid: Map<string, PatchCell>
+  findFree: FreeSpotFn
+}
+
+type PeripheralRefs = {
+  road: CircuitNode | undefined
+  refP: CircuitNode | undefined
+  refM: CircuitNode | undefined
+  refG: CircuitNode | undefined
+}
+
 function placePeripheralFields(
-  place: PlaceFn,
-  forcePlace: PlaceFn,
-  grid: Map<string, PatchCell>,
-  findFree: FreeSpotFn,
-  road: CircuitNode | undefined,
-  refP: CircuitNode | undefined,
-  refM: CircuitNode | undefined,
-  refG: CircuitNode | undefined,
+  ctx: PeripheralPlaceCtx,
+  refs: PeripheralRefs,
 ): void {
+  const { place, forcePlace, grid, findFree } = ctx
+  const { road, refP, refM, refG } = refs
   placeMeFields(forcePlace, refP, refM)
   placeMasseP(forcePlace, refG)
   placeStuetzpunkte(forcePlace)
@@ -1155,14 +1134,8 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
   placeMultiplierSilkAndLive(mults, place)
   placePotentiometers(pots, forcePlace)
   placePeripheralFields(
-    place,
-    forcePlace,
-    grid,
-    findFree,
-    road,
-    refP,
-    refM,
-    refG,
+    { place, forcePlace, grid, findFree },
+    { road, refP, refM, refG },
   )
   ensureEssentialPorts(nodes, place, findFree, grid)
 

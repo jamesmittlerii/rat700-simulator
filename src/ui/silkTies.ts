@@ -90,7 +90,7 @@ function mergeIntervals(intervals: [number, number][]): [number, number][] {
 type EdgeMaps = {
   horiz: Map<string, [number, number][]>
   vert: Map<string, [number, number][]>
-  push: (
+  addEdge: (
     map: Map<string, [number, number][]>,
     fixed: number,
     a: number,
@@ -102,7 +102,7 @@ function makeEdgeMaps(): EdgeMaps {
   const horiz = new Map<string, [number, number][]>()
   const vert = new Map<string, [number, number][]>()
   const key = (n: number) => n.toFixed(4)
-  const push = (
+  const addEdge = (
     map: Map<string, [number, number][]>,
     fixed: number,
     a: number,
@@ -113,7 +113,7 @@ function makeEdgeMaps(): EdgeMaps {
     list.push([a, b])
     map.set(k, list)
   }
-  return { horiz, vert, push }
+  return { horiz, vert, addEdge }
 }
 
 function pushBoxEdges(maps: EdgeMaps, box: SilkRect): void {
@@ -121,10 +121,10 @@ function pushBoxEdges(maps: EdgeMaps, box: SilkRect): void {
   const x1 = box.x + box.w
   const y0 = box.y
   const y1 = box.y + box.h
-  maps.push(maps.horiz, y0, x0, x1)
-  maps.push(maps.horiz, y1, x0, x1)
-  maps.push(maps.vert, x0, y0, y1)
-  maps.push(maps.vert, x1, y0, y1)
+  maps.addEdge(maps.horiz, y0, x0, x1)
+  maps.addEdge(maps.horiz, y1, x0, x1)
+  maps.addEdge(maps.vert, x0, y0, y1)
+  maps.addEdge(maps.vert, x1, y0, y1)
 }
 
 /** Pot L-outlines — omit the m/n bar over an ungrounded low jack. */
@@ -139,11 +139,11 @@ function pushPotLOutlines(maps: EdgeMaps): void {
     const lowIdx = section.pots.findIndex((p) =>
       (UNGROUNDED_POT_NUMBERS as readonly number[]).includes(p),
     )
-    maps.push(maps.horiz, y0, x0, x1)
+    maps.addEdge(maps.horiz, y0, x0, x1)
     if (lowIdx < 0) {
-      maps.push(maps.horiz, yM, x0, x1)
-      maps.push(maps.vert, x0, y0, yM)
-      maps.push(maps.vert, x1, y0, yM)
+      maps.addEdge(maps.horiz, yM, x0, x1)
+      maps.addEdge(maps.vert, x0, y0, yM)
+      maps.addEdge(maps.vert, x1, y0, yM)
       continue
     }
     const lowCol = cols[lowIdx]!
@@ -151,18 +151,18 @@ function pushPotLOutlines(maps: EdgeMaps): void {
     const xr = lowCol
     if (lowIdx === 0) {
       // Low on the left (pots 11, 16 → n18, n26).
-      maps.push(maps.vert, x0, y0, yN)
-      maps.push(maps.vert, x1, y0, yM)
-      maps.push(maps.horiz, yM, xr, x1)
-      maps.push(maps.vert, xr, yM, yN)
-      maps.push(maps.horiz, yN, x0, xr)
+      maps.addEdge(maps.vert, x0, y0, yN)
+      maps.addEdge(maps.vert, x1, y0, yM)
+      maps.addEdge(maps.horiz, yM, xr, x1)
+      maps.addEdge(maps.vert, xr, yM, yN)
+      maps.addEdge(maps.horiz, yN, x0, xr)
     } else {
       // Low on the right (pots 5, 10 → n5, n13).
-      maps.push(maps.vert, x0, y0, yM)
-      maps.push(maps.vert, x1, y0, yN)
-      maps.push(maps.horiz, yM, x0, xl)
-      maps.push(maps.vert, xl, yM, yN)
-      maps.push(maps.horiz, yN, xl, x1)
+      maps.addEdge(maps.vert, x0, y0, yM)
+      maps.addEdge(maps.vert, x1, y0, yN)
+      maps.addEdge(maps.horiz, yM, x0, xl)
+      maps.addEdge(maps.vert, xl, yM, yN)
+      maps.addEdge(maps.horiz, yN, xl, x1)
     }
   }
 }
@@ -179,19 +179,19 @@ function pushMasseOutline(maps: EdgeMaps): void {
     .map((c) => [c - 1, c] as const)
     .sort((a, b) => a[0] - b[0])
 
-  maps.push(maps.horiz, yBot, x0, x1)
-  maps.push(maps.vert, x0, yMid, yBot)
-  maps.push(maps.vert, x1, yMid, yBot)
+  maps.addEdge(maps.horiz, yBot, x0, x1)
+  maps.addEdge(maps.vert, x0, yMid, yBot)
+  maps.addEdge(maps.vert, x1, yMid, yBot)
 
   let cursor = x0
   for (const [xl, xr] of stubSpans) {
-    if (cursor < xl) maps.push(maps.horiz, yMid, cursor, xl)
-    maps.push(maps.horiz, yTop, xl, xr)
-    maps.push(maps.vert, xl, yTop, yMid)
-    maps.push(maps.vert, xr, yTop, yMid)
+    if (cursor < xl) maps.addEdge(maps.horiz, yMid, cursor, xl)
+    maps.addEdge(maps.horiz, yTop, xl, xr)
+    maps.addEdge(maps.vert, xl, yTop, yMid)
+    maps.addEdge(maps.vert, xr, yTop, yMid)
     cursor = xr
   }
-  if (cursor < x1) maps.push(maps.horiz, yMid, cursor, x1)
+  if (cursor < x1) maps.addEdge(maps.horiz, yMid, cursor, x1)
 }
 
 function flushEdgeMaps(maps: EdgeMaps): SilkSegment[] {
@@ -281,11 +281,9 @@ export function buildSilkSections(): SilkRect[] {
     boxes.push(sectionBox(cols[0], cols.at(-1)!, 'n', 'o'))
   }
 
-  // Abschaltleitung (AS) — bottom left.
-  boxes.push(sectionBox(ABSCHALT_COL, ABSCHALT_COL, 'n', 'o'))
-
-  // verfügbar spare fields — bottom left / right row p.
+  // Abschaltleitung (AS) + verfügbar spare fields (row p / n30 / o30).
   boxes.push(
+    sectionBox(ABSCHALT_COL, ABSCHALT_COL, 'n', 'o'),
     sectionBox(
       VERFUEGBAR_LEFT_COLS[0],
       VERFUEGBAR_LEFT_COLS.at(-1)!,
