@@ -1,6 +1,15 @@
 import { createNode } from '../engine/elements'
 import { fromSnapshot } from '../engine/circuit'
-import type { Cable, CircuitNode, CircuitSnapshot } from '../engine/types'
+import type { CircuitNode } from '../engine/types'
+import {
+  baseSnapshot,
+  cable as c,
+  integratorNode,
+  potK1,
+  potK10,
+  potKMul10,
+  referenceNodes,
+} from './helpers'
 
 /**
  * Lorenz attractor — the classic butterfly, patched on the analog computer.
@@ -41,43 +50,18 @@ const BETA = 8 / 3
 /** Common integrator time factor used to realise the large coefficients. */
 const TF = 10
 
-/** Coefficient → pot setting for a linear gain-10 integrator input. */
-const k10 = (coeff: number) => coeff / TF / 10
-/** Coefficient → pot setting for a linear gain-1 integrator input. */
-const k1 = (coeff: number) => coeff / TF
-/**
- * Coefficient → pot setting for a gain-10 input fed by a multiplier output.
- * The quarter-square multiplier already divides by the ±10 V machine unit, so
- * one factor of ten is pre-applied and the pot only needs coeff / TF.
- */
-const kMul10 = (coeff: number) => coeff / TF
-
 /** Classic initial condition (x, y, z) = (1, 1, 1), in scaled volts. */
 const IC_X = 1 / SX
 const IC_Y = 1 / SY
 const IC_Z = 1 / SZ
 
-export function lorenzAttractorSnapshot(): CircuitSnapshot {
+export function lorenzAttractorSnapshot() {
   const nodes: CircuitNode[] = [
-    createNode('reference', 'ref_p10', '+10 V', 40, 40, { voltage: 10 }),
-    createNode('reference', 'ref_m10', '−10 V', 40, 120, { voltage: -10 }),
-    createNode('reference', 'ref_gnd', 'Ground', 40, 200, { voltage: 0 }),
+    ...referenceNodes(),
 
-    createNode('integrator', 'lorenz_x', 'Int x', 360, 80, {
-      initialCondition: IC_X,
-      state: IC_X,
-      timeFactor: TF,
-    }),
-    createNode('integrator', 'lorenz_y', 'Int y', 360, 260, {
-      initialCondition: IC_Y,
-      state: IC_Y,
-      timeFactor: TF,
-    }),
-    createNode('integrator', 'lorenz_z', 'Int z', 360, 440, {
-      initialCondition: IC_Z,
-      state: IC_Z,
-      timeFactor: TF,
-    }),
+    integratorNode('lorenz_x', 'Int x', 360, 80, IC_X, { timeFactor: TF }),
+    integratorNode('lorenz_y', 'Int y', 360, 260, IC_Y, { timeFactor: TF }),
+    integratorNode('lorenz_z', 'Int z', 360, 440, IC_Z, { timeFactor: TF }),
 
     createNode('inverter', 'inv_x', '−x', 600, 80),
     createNode('inverter', 'inv_y', '−y', 600, 20),
@@ -88,28 +72,28 @@ export function lorenzAttractorSnapshot(): CircuitSnapshot {
 
     // ẋ = 14·vY − 10·vX  (−10·vX is x's own feedback into in0, gain 1)
     createNode('potentiometer', 'pot_xy', 'σ·Sy/Sx (y→x)', 500, 140, {
-      coefficient: k10(SIGMA * (SY / SX)),
+      coefficient: potK10(SIGMA * (SY / SX), TF),
     }),
     // ẏ = 20·vX − 4.2857·vX·vZ − vY
     createNode('potentiometer', 'pot_yx', 'ρ·Sx/Sy (x→y)', 500, 200, {
-      coefficient: k10(RHO * (SX / SY)),
+      coefficient: potK10(RHO * (SX / SY), TF),
     }),
     createNode('potentiometer', 'pot_yxz', 'Sx·Sz/Sy (xz→y)', 500, 320, {
-      coefficient: kMul10((SX * SZ) / SY),
+      coefficient: potKMul10((SX * SZ) / SY, TF),
     }),
     createNode('potentiometer', 'pot_ydamp', '1/Sy·y decay', 500, 260, {
-      coefficient: k1(1),
+      coefficient: potK1(1, TF),
     }),
     // ż = 1.4583·vX·vY − 2.6667·vZ
     createNode('potentiometer', 'pot_zxy', 'Sx·Sy/Sz (xy→z)', 500, 500, {
-      coefficient: kMul10((SX * SY) / SZ),
+      coefficient: potKMul10((SX * SY) / SZ, TF),
     }),
     createNode('potentiometer', 'pot_zdamp', 'β (z decay)', 500, 440, {
-      coefficient: k1(BETA),
+      coefficient: potK1(BETA, TF),
     }),
   ]
 
-  const cables: Cable[] = [
+  const cables = [
     // Inverters produce the negated variables the sums need.
     c(1, 'lorenz_x', 'out', 'inv_x', 'in'), // inv_x = −vX
     c(2, 'lorenz_y', 'out', 'inv_y', 'in'), // inv_y = −vY
@@ -141,29 +125,7 @@ export function lorenzAttractorSnapshot(): CircuitSnapshot {
     c(20, 'pot_zdamp', 'out', 'lorenz_z', 'in0'),
   ]
 
-  return {
-    nodes,
-    cables,
-    mode: 'ic',
-    powered: true,
-    timeScale: 1,
-    time: 0,
-    panelButton: 'pause',
-  }
-}
-
-function c(
-  n: number,
-  fromId: string,
-  fromPort: string,
-  toId: string,
-  toPort: string,
-): Cable {
-  return {
-    id: `cable_${n}`,
-    from: { nodeId: fromId, port: fromPort },
-    to: { nodeId: toId, port: toPort },
-  }
+  return baseSnapshot(nodes, cables)
 }
 
 export function loadLorenzAttractor() {

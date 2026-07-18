@@ -1,6 +1,12 @@
 import { createNode } from '../engine/elements'
 import { fromSnapshot } from '../engine/circuit'
-import type { Cable, CircuitNode, CircuitSnapshot } from '../engine/types'
+import type { CircuitNode } from '../engine/types'
+import {
+  baseSnapshot,
+  cable as c,
+  integratorNode,
+  referenceNodes,
+} from './helpers'
 
 /**
  * Duffing oscillator — the snapping buckled beam (double-well, x³ stiffening).
@@ -29,11 +35,9 @@ const ALPHA = 1
 const IC_X = S // start in the right-hand well (x = +1)
 const IC_V = 0
 
-export function duffingOscillatorSnapshot(): CircuitSnapshot {
+export function duffingOscillatorSnapshot() {
   const nodes: CircuitNode[] = [
-    createNode('reference', 'ref_p10', '+10 V', 40, 40, { voltage: 10 }),
-    createNode('reference', 'ref_m10', '−10 V', 40, 120, { voltage: -10 }),
-    createNode('reference', 'ref_gnd', 'Ground', 40, 200, { voltage: 0 }),
+    ...referenceNodes(),
 
     createNode('signal', 'drive', 'γ·cos(ωt)', 40, 300, {
       waveform: 'sine',
@@ -41,16 +45,8 @@ export function duffingOscillatorSnapshot(): CircuitSnapshot {
       frequency: OMEGA,
     }),
 
-    createNode('integrator', 'duffing_x', 'Int x', 360, 80, {
-      initialCondition: IC_X,
-      state: IC_X,
-      timeFactor: 1,
-    }),
-    createNode('integrator', 'duffing_v', 'Int v = ẋ', 360, 260, {
-      initialCondition: IC_V,
-      state: IC_V,
-      timeFactor: 1,
-    }),
+    integratorNode('duffing_x', 'Int x', 360, 80, IC_X, { timeFactor: 1 }),
+    integratorNode('duffing_v', 'Int v = ẋ', 360, 260, IC_V, { timeFactor: 1 }),
 
     createNode('inverter', 'inv_x', '−x', 600, 40),
     createNode('inverter', 'inv_v', '−v', 600, 100),
@@ -69,7 +65,7 @@ export function duffingOscillatorSnapshot(): CircuitSnapshot {
     }),
   ]
 
-  const cables: Cable[] = [
+  const cables = [
     // ẋ = v : feed −v into the inverting x integrator (gain 1, direct)
     c(1, 'duffing_v', 'out', 'inv_v', 'in'),
     c(2, 'inv_v', 'out', 'duffing_x', 'in0'),
@@ -93,29 +89,7 @@ export function duffingOscillatorSnapshot(): CircuitSnapshot {
     c(14, 'pot_drive', 'out', 'duffing_v', 'in4'),
   ]
 
-  return {
-    nodes,
-    cables,
-    mode: 'ic',
-    powered: true,
-    timeScale: 2,
-    time: 0,
-    panelButton: 'pause',
-  }
-}
-
-function c(
-  n: number,
-  fromId: string,
-  fromPort: string,
-  toId: string,
-  toPort: string,
-): Cable {
-  return {
-    id: `cable_${n}`,
-    from: { nodeId: fromId, port: fromPort },
-    to: { nodeId: toId, port: toPort },
-  }
+  return baseSnapshot(nodes, cables, { timeScale: 2 })
 }
 
 export function loadDuffingOscillator() {
