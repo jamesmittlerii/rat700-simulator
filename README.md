@@ -2,12 +2,21 @@
 
 Browser-based, high-fidelity simulator of the Telefunken RAT 700 analog computer. Authentic **30×15** Programmierfeld faceplate (SVG), coefficient pot field, control panel with null-balance galvanometer, and a pure TypeScript RK4 engine.
 
+## Live site
+
+GitHub Pages directory + simulator:
+
+- **Directory:** [jamesmittlerii.github.io/rat700-simulator](https://jamesmittlerii.github.io/rat700-simulator/)
+- **Simulator:** […/simulator/](https://jamesmittlerii.github.io/rat700-simulator/simulator/)
+
 ## Run
 
 ```bash
 npm install
 npm run dev
 ```
+
+Dev server opens the GitHub Pages directory landing; use **Open RAT 700 simulator** (or visit `/simulator/`) for the faceplate app.
 
 ## Test
 
@@ -17,13 +26,14 @@ npm test
 
 ## Usage
 
-1. Open the **Front panel** tab (default).
-2. Load **Harmonic oscillator** or **Vehicle (firm/soft damp)** from the sidebar.
-3. Press **Dauerrechnen** — watch the XY phosphor scope on the faceplate.
-4. Drag patch cords jack→jack; hover a cable and click for delete/recolor.
-5. Use the **4-pin Σ/∫** and **2-pin 1/10** tray tools, then click a switchable amp column to place jumpers.
-6. **F1 / F2** rows: 21 knobs each (−10…+10) program the piecewise-linear function generators — scroll or drag vertically to set \(f(x)\).
-7. **Pot. Einst.**: select a pot channel button, set the master R11 dial, adjust the pot until the galvanometer centers.
+1. From the directory landing, open the **simulator** (or go straight to `/simulator/`).
+2. Open the **Front panel** tab (default).
+3. Load **Harmonic oscillator** or **Vehicle (firm/soft damp)** from the sidebar.
+4. Press **Dauerrechnen** — watch the XY phosphor scope on the faceplate.
+5. Drag patch cords jack→jack; hover a cable and click for delete/recolor.
+6. Use the **4-pin Σ/∫** and **2-pin 1/10** tray tools, then click a switchable amp column to place jumpers.
+7. **F1 / F2** rows: 21 knobs each (−10…+10) program the piecewise-linear function generators — scroll or drag vertically to set \(f(x)\).
+8. **Pot. Einst.**: select a pot channel button, set the master R11 dial, adjust the pot until the galvanometer centers.
 
 Patches save to `localStorage` key `rat700-patch-v2`.
 

@@ -2,18 +2,55 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RAT 700 Simulator</title>
+    <meta
+      name="description"
+      content="James Mittler II — GitHub Pages directory. Open the Telefunken RAT 700 analog computer simulator."
+    />
+    <title>James Mittler II — GitHub Pages</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Serif:wght@600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="./directory.css" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div class="atmosphere" aria-hidden="true">
+      <div class="grid"></div>
+      <div class="phosphor"></div>
+      <div class="vignette"></div>
+    </div>
+
+    <main class="hero">
+      <p class="brand">James Mittler II</p>
+      <h1 class="headline">GitHub Pages directory</h1>
+      <p class="lede">
+        Analog computing, patched in the browser — start with the Telefunken RAT&nbsp;700
+        museum faceplate simulator.
+      </p>
+      <div class="cta-row">
+        <a class="cta" href="./simulator/">Open RAT 700 simulator</a>
+        <a
+          class="cta ghost"
+          href="https://github.com/jamesmittlerii/rat700-simulator"
+          rel="noopener noreferrer"
+          >View source</a
+        >
+      </div>
+    </main>
+
+    <section class="directory" aria-label="Projects">
+      <h2 class="dir-label">Projects</h2>
+      <a class="project" href="./simulator/">
+        <span class="project-name">RAT 700 Simulator</span>
+        <span class="project-desc"
+          >Browser Telefunken RAT 700 — patch, compute, watch the phosphor scope.</span
+        >
+        <span class="project-go" aria-hidden="true">→</span>
+      </a>
+    </section>
   </body>
 </html>
