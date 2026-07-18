@@ -19,12 +19,12 @@ export function signalOutput(
 
 /** Deterministic hash → roughly uniform in [-1, 1]. */
 function noiseSample(index: number): number {
-  let n = index | 0
+  let n = Math.trunc(index)
   n = Math.imul(n ^ (n >>> 16), 0x45d9f3b)
   n = Math.imul(n ^ (n >>> 16), 0x45d9f3b)
   n = n ^ (n >>> 16)
   // signed 32-bit → [-1, 1)
-  return (n | 0) / 2147483648
+  return Math.trunc(n) / 2147483648
 }
 
 /**
