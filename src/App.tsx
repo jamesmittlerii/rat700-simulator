@@ -349,9 +349,8 @@ export default function App() {
             <div className="readouts" style={{ height: scopeHeight }}>
               <XYScope ref={scopeRef} machine={machine} />
             </div>
-            <div
+            <hr
               className="workspace-splitter"
-              role="separator"
               aria-orientation="horizontal"
               aria-valuenow={scopeHeight}
               aria-valuemin={SCOPE_HEIGHT_MIN}

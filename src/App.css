@@ -204,9 +204,12 @@
 
 .workspace-splitter {
   flex-shrink: 0;
+  width: 100%;
   height: 8px;
   margin: 0.35rem 0;
+  padding: 0;
   cursor: row-resize;
+  border: none;
   border-radius: 3px;
   background: linear-gradient(
     180deg,
@@ -509,8 +512,8 @@
   letter-spacing: 0.02em;
   padding: 0.12rem 0.28rem;
   border-radius: 999px;
-  background: #3a3a38;
-  color: #8a8a86;
+  background: #2a2a28;
+  color: #c8c8c4;
   text-align: center;
   min-width: 1.8rem;
 }
@@ -585,9 +588,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
+  gap: 0.12rem;
   cursor: pointer;
   min-width: 0;
+  padding-top: 0;
 }
 
 .fp-pot.empty {
@@ -835,8 +839,9 @@
 }
 
 .fp-cable.preview {
-  stroke: #5c4a32;
-  stroke-dasharray: 0.25 0.2;
+  stroke: #eee;
+  stroke-width: 0.1;
+  stroke-dasharray: 0.15 0.1;
   opacity: 0.85;
 }
 
@@ -1103,19 +1108,20 @@ button.fp-jack:hover {
 /* —— v2 faceplate additions —— */
 .fp-alert {
   margin: 0.35rem 0.75rem 0;
-  padding: 0.4rem 0.65rem;
+  padding: 0.2rem 0.45rem;
   background: #f3e0c8;
   border: 1px solid #a06020;
   color: #5a3010;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   border-radius: 2px;
 }
 
 .fp-scope-slot {
-  min-height: 160px;
+  flex: 1;
+  min-height: 140px;
   max-height: 220px;
-  background: #1a1c18;
-  border: 2px solid #2a2a28;
+  background: #0a120a;
+  border: 2px solid #1a2818;
   border-radius: 2px;
   overflow: hidden;
 }
@@ -1129,7 +1135,7 @@ button.fp-jack:hover {
 
 .fp-model {
   font-size: 0.7rem;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.2em;
   color: #3a3a38;
   font-weight: 600;
 }
@@ -1209,15 +1215,15 @@ button.fp-jack:hover {
 }
 
 .fp-jumper-block {
-  fill: #c8b890;
-  stroke: #2a2a28;
-  stroke-width: 0.06;
+  fill: #d4c4a0;
+  stroke: #3a3020;
+  stroke-width: 0.04;
   opacity: 0.85;
   pointer-events: none;
 }
 
 .fp-jumper-block.kind-time2 {
-  fill: #90a8c8;
+  fill: #a0b8d4;
 }
 
 .fp-cable.hover {
@@ -1226,30 +1232,31 @@ button.fp-jack:hover {
 }
 
 .fp-cable-menu {
-  position: fixed;
-  z-index: 40;
+  position: absolute;
+  z-index: 5;
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
   padding: 0.35rem;
-  background: #f4f0e4;
-  border: 1px solid #2a2a28;
+  background: #ebe6d8;
+  border: 1px solid #3a3a38;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   border-radius: 2px;
 }
 
 .fp-cable-menu button {
   appearance: none;
-  border: 1px solid #2a2a28;
-  background: #e8e4d8;
-  font-size: 0.7rem;
-  padding: 0.2rem 0.4rem;
+  border: 1px solid #5a5a58;
+  background: #fff;
+  font-size: 0.65rem;
+  padding: 0.2rem 0.35rem;
   cursor: pointer;
+  font-family: inherit;
 }
 
 .fp-color-swatch {
-  width: 1.1rem;
-  height: 1.1rem;
+  width: 1rem;
+  height: 1rem;
   padding: 0 !important;
   border-radius: 2px;
 }
@@ -1257,8 +1264,8 @@ button.fp-jack:hover {
 .fp-master-ref {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  font-size: 0.68rem;
+  gap: 0.15rem;
+  font-size: 0.65rem;
   color: #2a2a28;
   margin: 0.35rem 0;
 }
@@ -1293,13 +1300,6 @@ button.fp-jack:hover {
   outline: 2px solid #c8a020;
 }
 
-.fp-pot {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.15rem;
-}
-
 /* —— v2 faceplate layout —— */
 .front-panel.v2 {
   gap: 0.4rem;
@@ -1328,23 +1328,11 @@ button.fp-jack:hover {
   color: #1a1a18;
 }
 
-.fp-model {
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  color: #3a3a38;
-}
-
 .fp-alert-stack {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-}
-
-.fp-alert {
-  font-size: 0.72rem;
-  padding: 0.2rem 0.45rem;
-  border-radius: 2px;
 }
 
 .fp-alert.warn {
@@ -1365,15 +1353,6 @@ button.fp-jack:hover {
   padding: 0.45rem 0.4rem 0.4rem;
   background: linear-gradient(180deg, #9aa4ac, #7a848c);
   border: 1px solid #5a646c;
-}
-
-.fp-pot {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.12rem;
-  padding-top: 0;
 }
 
 .fp-pot-face {
@@ -1452,13 +1431,6 @@ button.fp-jack:hover {
   padding: 0.35rem;
 }
 
-.fp-jumper-tray {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-}
-
 .fp-tray-label {
   font-size: 0.65rem;
   letter-spacing: 0.08em;
@@ -1530,6 +1502,15 @@ button.fp-jack:hover {
   z-index: 1;
 }
 
+button.fp-jack-cell {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
 .fp-jack-mark {
   position: absolute;
   top: 0;
@@ -1555,60 +1536,9 @@ button.fp-jack:hover {
   outline-offset: -1px;
 }
 
-.fp-cable {
-  stroke-width: 0.12;
-  cursor: pointer;
-  pointer-events: stroke;
-}
-
 .fp-cable.hot {
   stroke-width: 0.22;
   filter: brightness(1.25);
-}
-
-.fp-cable.preview {
-  stroke: #eee;
-  stroke-width: 0.1;
-  stroke-dasharray: 0.15 0.1;
-}
-
-.fp-jumper-block {
-  fill: #d4c4a0;
-  stroke: #3a3020;
-  stroke-width: 0.04;
-  pointer-events: none;
-}
-
-.fp-jumper-block.kind-time2 {
-  fill: #a0b8d4;
-}
-
-.fp-cable-menu {
-  position: absolute;
-  z-index: 5;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  padding: 0.35rem;
-  background: #ebe6d8;
-  border: 1px solid #3a3a38;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-}
-
-.fp-cable-menu button {
-  font-size: 0.65rem;
-  padding: 0.2rem 0.35rem;
-  cursor: pointer;
-  border: 1px solid #5a5a58;
-  background: #fff;
-  font-family: inherit;
-}
-
-.fp-color-swatch {
-  width: 1rem;
-  height: 1rem;
-  border-radius: 2px;
-  padding: 0 !important;
 }
 
 .fp-controls {
@@ -1629,21 +1559,6 @@ button.fp-jack:hover {
   padding: 0.25rem;
 }
 
-.fp-master-ref {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  font-size: 0.65rem;
-}
-
-.fp-master-ref input {
-  width: 100%;
-}
-
-.fp-master-val {
-  font-variant-numeric: tabular-nums;
-}
-
 .front-panel.v2 .fp-mode-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1651,15 +1566,6 @@ button.fp-jack:hover {
   margin: 0;
   padding: 0;
   border: none;
-}
-
-.fp-scope-slot {
-  flex: 1;
-  min-height: 140px;
-  background: #0a120a;
-  border: 2px solid #1a2818;
-  border-radius: 2px;
-  overflow: hidden;
 }
 
 .fp-scope-slot .xy-scope,

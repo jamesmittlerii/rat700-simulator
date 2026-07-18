@@ -170,7 +170,9 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
     for (const ch of channels) {
       const buf = buffers.current[ch.id]
       if (!buf || buf.length < 2) continue
-      const stride = buf.length > 1200 ? 4 : buf.length > 500 ? 2 : 1
+      let stride = 1
+      if (buf.length > 1200) stride = 4
+      else if (buf.length > 500) stride = 2
       for (let band = 0; band < BANDS; band++) {
         const lo = band / BANDS
         const hi = (band + 1) / BANDS
