@@ -55,7 +55,7 @@ const SCOPE_HEIGHT_MAX = 560
 type WorkspaceTab = 'schematic' | 'frontPanel'
 
 export default function App() {
-  const [machine, setMachineState] = useState<MachineState>(() =>
+  const [machine, setMachine] = useState<MachineState>(() =>
     setPanelButton(loadVehicleSuspension('firm'), 'dauer'),
   )
   const [selectedId, setSelectedId] = useState<string | null>(VEHICLE_NODES.body)
@@ -129,14 +129,14 @@ export default function App() {
     [],
   )
 
-  const setMachine = useCallback(
+  const commitMachine = useCallback(
     (updater: MachineState | ((m: MachineState) => MachineState)) => {
       // Always derive from the live ref (not throttled React state) so edits
       // during Operate never rewind the simulation.
       const next =
         typeof updater === 'function' ? updater(machineRef.current) : updater
       machineRef.current = next
-      setMachineState(next)
+      setMachine(next)
     },
     [],
   )
@@ -158,7 +158,7 @@ export default function App() {
         // immediately when the mode changes (e.g. overload auto-shutdown).
         if (next.mode !== m.mode || now - lastFlush >= 66) {
           lastFlush = now
-          setMachineState(next)
+          setMachine(next)
         }
       }
       raf = requestAnimationFrame(tick)
@@ -169,21 +169,21 @@ export default function App() {
 
   const onMode = useCallback(
     (mode: MachineMode) => {
-      setMachine((m) => setMode(m, mode))
+      commitMachine((m) => setMode(m, mode))
     },
-    [setMachine],
+    [commitMachine],
   )
 
   const onPanelButton = useCallback(
     (btn: PanelButton) => {
-      setMachine((m) => setPanelButton(m, btn))
+      commitMachine((m) => setPanelButton(m, btn))
     },
-    [setMachine],
+    [commitMachine],
   )
 
   const onAdd = useCallback(
     (kind: 'potentiometer' | 'summer' | 'integrator' | 'inverter') => {
-      setMachine((m) => {
+      commitMachine((m) => {
         const { machine: next, error } = addElement(
           m,
           kind as ElementKind,
@@ -195,18 +195,18 @@ export default function App() {
         return next
       })
     },
-    [setMachine],
+    [commitMachine],
   )
 
   const onConnect = useCallback(
     (from: PortRef, to: PortRef, color?: string) => {
-      setMachine((m) => {
+      commitMachine((m) => {
         const { machine: next, error } = addCable(m, from, to, color)
         if (error) setStatus(error)
         return next
       })
     },
-    [setMachine],
+    [commitMachine],
   )
 
   const handleLoadSaved = useCallback(() => {
@@ -217,13 +217,13 @@ export default function App() {
     }
     try {
       const snap = JSON.parse(raw)
-      setMachine(fromSnapshot(snap))
+      commitMachine(fromSnapshot(snap))
       setActivePreset(null)
       setStatus('Patch loaded.')
     } catch {
       setStatus('Failed to load saved patch.')
     }
-  }, [setMachine])
+  }, [commitMachine])
 
   const handleSave = useCallback(() => {
     const snap = toSnapshot(machineRef.current)
@@ -237,18 +237,18 @@ export default function App() {
         machine={machine}
         selectedId={selectedId}
         onMode={onMode}
-        onPower={(on) => setMachine((m) => ({ ...m, powered: on }))}
-        onTimeScale={(v) => setMachine((m) => ({ ...m, timeScale: v }))}
-        onReset={() => setMachine((m) => resetTime(m))}
+        onPower={(on) => commitMachine((m) => ({ ...m, powered: on }))}
+        onTimeScale={(v) => commitMachine((m) => ({ ...m, timeScale: v }))}
+        onReset={() => commitMachine((m) => resetTime(m))}
         onAdd={onAdd}
         onLoadOscillator={() => {
-          setMachine(loadHarmonicOscillator())
+          commitMachine(loadHarmonicOscillator())
           setSelectedId('int_1')
           setActivePreset('oscillator')
           setStatus('Loaded harmonic oscillator preset.')
         }}
         onLoadVehicle={(damping) => {
-          setMachine(loadVehicleSuspension(damping))
+          commitMachine(loadVehicleSuspension(damping))
           setSelectedId(VEHICLE_NODES.body)
           setActivePreset(damping === 'firm' ? 'vehicle-firm' : 'vehicle-soft')
           setStatus(
@@ -258,31 +258,31 @@ export default function App() {
           )
         }}
         onLoadLorenz={() => {
-          setMachine(loadLorenzAttractor())
+          commitMachine(loadLorenzAttractor())
           setSelectedId(LORENZ_NODES.x)
           setActivePreset('lorenz')
           setStatus('Loaded Lorenz attractor preset — press Compute (Operate).')
         }}
         onLoadRossler={() => {
-          setMachine(loadRosslerAttractor())
+          commitMachine(loadRosslerAttractor())
           setSelectedId(ROSSLER_NODES.x)
           setActivePreset('rossler')
           setStatus('Loaded Rössler attractor preset — press Compute (Operate).')
         }}
         onLoadVanDerPol={() => {
-          setMachine(loadVanDerPol())
+          commitMachine(loadVanDerPol())
           setSelectedId(VAN_DER_POL_NODES.x)
           setActivePreset('vanDerPol')
           setStatus('Loaded Van der Pol oscillator — press Compute (Operate).')
         }}
         onLoadMathieu={() => {
-          setMachine(loadMathieuEquation())
+          commitMachine(loadMathieuEquation())
           setSelectedId(MATHIEU_NODES.x)
           setActivePreset('mathieu')
           setStatus('Loaded Mathieu equation — press Compute (Operate).')
         }}
         onLoadDuffing={() => {
-          setMachine(loadDuffingOscillator())
+          commitMachine(loadDuffingOscillator())
           setSelectedId(DUFFING_NODES.x)
           setActivePreset('duffing')
           setStatus('Loaded Duffing oscillator — press Compute (Operate).')
@@ -290,19 +290,19 @@ export default function App() {
         onSave={handleSave}
         onLoad={handleLoadSaved}
         onClear={() => {
-          setMachine(createEmptyMachine())
+          commitMachine(createEmptyMachine())
           setSelectedId(null)
           setActivePreset(null)
           setStatus('Cleared to empty patch bay.')
         }}
-        onCoefficient={(id, k) => setMachine((m) => setCoefficient(m, id, k))}
-        onIC={(id, v) => setMachine((m) => setInitialCondition(m, id, v))}
+        onCoefficient={(id, k) => commitMachine((m) => setCoefficient(m, id, k))}
+        onIC={(id, v) => commitMachine((m) => setInitialCondition(m, id, v))}
         onSignal={(id, params) =>
-          setMachine((m) => setSignalParams(m, id, params))
+          commitMachine((m) => setSignalParams(m, id, params))
         }
         onDeleteSelected={() => {
           if (!selectedId) return
-          setMachine((m) => removeNode(m, selectedId))
+          commitMachine((m) => removeNode(m, selectedId))
           setSelectedId(null)
         }}
         activePreset={activePreset}
@@ -366,10 +366,10 @@ export default function App() {
               selectedId={selectedId}
               onSelect={setSelectedId}
               onMoveNode={(id, x, y) =>
-                setMachine((m) => moveNode(m, id, x, y))
+                commitMachine((m) => moveNode(m, id, x, y))
               }
               onConnect={onConnect}
-              onRemoveCable={(id) => setMachine((m) => removeCable(m, id))}
+              onRemoveCable={(id) => commitMachine((m) => removeCable(m, id))}
             />
           </div>
         ) : (
@@ -385,27 +385,27 @@ export default function App() {
               selectedId={selectedId}
               onSelect={setSelectedId}
               onPanelButton={onPanelButton}
-              onPower={(on) => setMachine((m) => ({ ...m, powered: on }))}
+              onPower={(on) => commitMachine((m) => ({ ...m, powered: on }))}
               onCoefficient={(id, k) =>
-                setMachine((m) => setCoefficient(m, id, k))
+                commitMachine((m) => setCoefficient(m, id, k))
               }
               onConnect={onConnect}
-              onRemoveCable={(id) => setMachine((m) => removeCable(m, id))}
+              onRemoveCable={(id) => commitMachine((m) => removeCable(m, id))}
               onCableColor={(id, color) =>
-                setMachine((m) => setCableColor(m, id, color))
+                commitMachine((m) => setCableColor(m, id, color))
               }
               onJumper={(j: JumperPlacement) =>
-                setMachine((m) => setJumper(m, j))
+                commitMachine((m) => setJumper(m, j))
               }
-              onMasterRef={(v) => setMachine((m) => setMasterRef(m, v))}
+              onMasterRef={(v) => commitMachine((m) => setMasterRef(m, v))}
               onCalibratePot={(id) =>
-                setMachine((m) => setCalibratePot(m, id))
+                commitMachine((m) => setCalibratePot(m, id))
               }
               onAutoShutdown={(on) =>
-                setMachine((m) => ({ ...m, autoShutdown: on }))
+                commitMachine((m) => ({ ...m, autoShutdown: on }))
               }
               onFgBreakpoint={(id, index, y) =>
-                setMachine((m) => setFgBreakpoint(m, id, index, y))
+                commitMachine((m) => setFgBreakpoint(m, id, index, y))
               }
             />
           </div>

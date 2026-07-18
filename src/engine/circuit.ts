@@ -15,7 +15,6 @@ import {
   MAX_AMPLIFIERS,
   MAX_MULTIPLIERS,
   MAX_POTENTIOMETERS,
-  OVERLOAD_THRESHOLD,
   panelButtonFromMode,
   panelButtonToMode,
   type Cable,
@@ -120,7 +119,7 @@ export function potCalMeter(machine: MachineState): number {
   const potId = machine.calibratePotId
   if (!potId) return 0
   const pot = machine.nodes.find((n) => n.id === potId)
-  if (!pot || pot.kind !== 'potentiometer') return 0
+  if (pot?.kind !== 'potentiometer') return 0
   const vin =
     machine.lastEval.voltages[portKey({ nodeId: potId, port: 'in' })] ??
     MACHINE_UNIT
@@ -329,7 +328,7 @@ export function applyJumperConfig(
   nodeId: string,
 ): MachineState {
   const node = machine.nodes.find((n) => n.id === nodeId)
-  if (!node || node.ampSlot == null) return machine
+  if (node?.ampSlot == null) return machine
   const cfg = ampConfigFromJumpers(node.ampSlot, machine.jumpers)
   const nodes = machine.nodes.map((n) => {
     if (n.id !== nodeId) return n
@@ -610,9 +609,12 @@ export function addCable(
   to: Cable['to'],
   color?: string,
 ): { machine: MachineState; error?: string } {
-  const fromNode = machine.nodes.find((n) => n.id === from.nodeId)
-  const toNode = machine.nodes.find((n) => n.id === to.nodeId)
-  if (!fromNode || !toNode) return { machine, error: 'Invalid jack.' }
+  if (
+    !machine.nodes.some((n) => n.id === from.nodeId) ||
+    !machine.nodes.some((n) => n.id === to.nodeId)
+  ) {
+    return { machine, error: 'Invalid jack.' }
+  }
 
   const cables = machine.cables.filter(
     (c) => !(c.to.nodeId === to.nodeId && c.to.port === to.port),
@@ -700,8 +702,6 @@ export function fromSnapshot(snap: CircuitSnapshot): MachineState {
       createNode('functionGenerator', 'fg_1', 'F1', 100, 40, {
         breakpoints: zeroFgBreakpoints(),
       }),
-    )
-    nodes.push(
       createNode('functionGenerator', 'fg_2', 'F2', 100, 120, {
         breakpoints: zeroFgBreakpoints(),
       }),
@@ -762,4 +762,4 @@ export function loadMachine(machine: MachineState): MachineState {
   return machine
 }
 
-export { OVERLOAD_THRESHOLD }
+export { OVERLOAD_THRESHOLD } from './types'

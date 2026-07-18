@@ -298,7 +298,7 @@ describe('vehicle suspension', () => {
     for (const damping of ['firm', 'soft'] as const) {
       const m = loadVehicleSuspension(damping)
       const computing = m.nodes.filter((n) => isComputingAmp(n.kind))
-      expect(computing.length).toBe(15)
+      expect(computing).toHaveLength(15)
       expect(computing.every((n) => n.ampSlot != null && n.ampSlot < 15)).toBe(
         true,
       )
