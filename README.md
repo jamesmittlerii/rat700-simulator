@@ -2,6 +2,11 @@
 
 Browser-based, high-fidelity simulator of the Telefunken RAT 700 analog computer. Authentic **30×15** Programmierfeld faceplate (SVG), coefficient pot field, control panel with null-balance galvanometer, and a pure TypeScript RK4 engine.
 
+## Live site
+
+- **Simulator (project Pages):** [jamesmittlerii.github.io/rat700-simulator](https://jamesmittlerii.github.io/rat700-simulator/)
+- **User-site directory source:** [`user-site/`](./user-site/) → deploy to repo `jamesmittlerii.github.io` for [jamesmittlerii.github.io](https://jamesmittlerii.github.io/)
+
 ## Run
 
 ```bash

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="James Mittler II — GitHub Pages directory of published project sites."
+    />
+    <title>James Mittler II</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true">
+      <div class="grid"></div>
+      <div class="phosphor"></div>
+      <div class="vignette"></div>
+    </div>
+
+    <main class="hero">
+      <p class="brand">James Mittler II</p>
+      <h1 class="headline">GitHub Pages</h1>
+      <p class="lede">
+        Master directory for Pages-enabled repositories — project sites live at
+        <span class="mono">jamesmittlerii.github.io/&lt;repo&gt;</span>.
+      </p>
+    </main>
+
+    <section class="directory" aria-labelledby="projects-heading">
+      <div class="dir-head">
+        <h2 id="projects-heading" class="dir-label">Published sites</h2>
+        <p id="status" class="status" role="status">Loading Pages repos…</p>
+      </div>
+      <div id="projects" class="projects"></div>
+    </section>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
