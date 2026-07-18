@@ -36,6 +36,7 @@ Patches save to `localStorage` key `rat700-patch-v2`.
 - **Van der Pol** — non-linear damping (μ=2) that converges to a limit cycle; scope shows the x–ẋ phase portrait.
 - **Mathieu equation** — parametric pendulum ẍ + [a − 2q·cos 2t]x = 0 in a stable band; scope traces bounded precessing rings (x vs ẋ).
 - **Duffing oscillator** — forced double-well beam (β=−1, α=1, δ=0.25, γ=0.4, ω=1) that snaps between wells; scope shows the x–ẋ portrait.
+- **Soft-spring 3-body** — restricted soft triangle: two free masses + fixed third at the origin; linear A–B / A–C / B–C springs with cubic softening on A; scope shows body A's drifting x–y flower.
 
 ## Engine (`src/engine/`)
 
