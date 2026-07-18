@@ -120,18 +120,23 @@ function bufferStride(length: number): number {
   return 1
 }
 
+type PhosphorView = {
+  cx: number
+  cy: number
+  px: number
+  now: number
+  persistSec: number
+}
+
 function drawPhosphorBand(
   ctx: CanvasRenderingContext2D,
   buf: Pt[],
   stride: number,
-  lo: number,
-  hi: number,
-  now: number,
-  persistSec: number,
-  cx: number,
-  cy: number,
-  px: number,
+  band: { lo: number; hi: number },
+  view: PhosphorView,
 ): void {
+  const { lo, hi } = band
+  const { cx, cy, px, now, persistSec } = view
   const alpha = Math.max(0.08, 1 - (lo + hi) / 2)
   ctx.strokeStyle = `rgba(57, 255, 122, ${alpha.toFixed(3)})`
   ctx.beginPath()
@@ -161,13 +166,7 @@ function drawPhosphorTraces(
   ctx: CanvasRenderingContext2D,
   buffers: Record<string, Pt[]>,
   channels: ScopeChannel[],
-  view: {
-    cx: number
-    cy: number
-    px: number
-    now: number
-    persistSec: number
-  },
+  view: PhosphorView,
 ): void {
   const BANDS = 6
   for (const ch of channels) {
@@ -175,18 +174,10 @@ function drawPhosphorTraces(
     if (!buf || buf.length < 2) continue
     const stride = bufferStride(buf.length)
     for (let band = 0; band < BANDS; band++) {
-      drawPhosphorBand(
-        ctx,
-        buf,
-        stride,
-        band / BANDS,
-        (band + 1) / BANDS,
-        view.now,
-        view.persistSec,
-        view.cx,
-        view.cy,
-        view.px,
-      )
+      drawPhosphorBand(ctx, buf, stride, {
+        lo: band / BANDS,
+        hi: (band + 1) / BANDS,
+      }, view)
     }
   }
 }
