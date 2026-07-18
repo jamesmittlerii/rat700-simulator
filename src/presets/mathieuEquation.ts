@@ -1,6 +1,12 @@
 import { createNode } from '../engine/elements'
 import { fromSnapshot } from '../engine/circuit'
-import type { Cable, CircuitNode, CircuitSnapshot } from '../engine/types'
+import type { CircuitNode } from '../engine/types'
+import {
+  baseSnapshot,
+  cable as c,
+  integratorNode,
+  referenceNodes,
+} from './helpers'
 
 /**
  * Mathieu equation — the parametric pendulum / playground swing.
@@ -28,11 +34,9 @@ const DRIVE_OMEGA = 2 * TF
 const IC_X = 3
 const IC_V = 0
 
-export function mathieuEquationSnapshot(): CircuitSnapshot {
+export function mathieuEquationSnapshot() {
   const nodes: CircuitNode[] = [
-    createNode('reference', 'ref_p10', '+10 V', 40, 40, { voltage: 10 }),
-    createNode('reference', 'ref_m10', '−10 V', 40, 120, { voltage: -10 }),
-    createNode('reference', 'ref_gnd', 'Ground', 40, 200, { voltage: 0 }),
+    ...referenceNodes(),
 
     createNode('signal', 'drive', 'cos(2τ)', 40, 300, {
       waveform: 'sine',
@@ -40,14 +44,8 @@ export function mathieuEquationSnapshot(): CircuitSnapshot {
       frequency: DRIVE_OMEGA,
     }),
 
-    createNode('integrator', 'mathieu_x', 'Int x', 360, 80, {
-      initialCondition: IC_X,
-      state: IC_X,
-      timeFactor: TF,
-    }),
-    createNode('integrator', 'mathieu_v', 'Int v = ẋ', 360, 260, {
-      initialCondition: IC_V,
-      state: IC_V,
+    integratorNode('mathieu_x', 'Int x', 360, 80, IC_X, { timeFactor: TF }),
+    integratorNode('mathieu_v', 'Int v = ẋ', 360, 260, IC_V, {
       timeFactor: TF,
     }),
 
@@ -64,7 +62,7 @@ export function mathieuEquationSnapshot(): CircuitSnapshot {
     }),
   ]
 
-  const cables: Cable[] = [
+  const cables = [
     // ẋ = v : feed −v into the inverting x integrator (gain 1, direct)
     c(1, 'mathieu_v', 'out', 'inv_v', 'in'),
     c(2, 'inv_v', 'out', 'mathieu_x', 'in0'),
@@ -81,29 +79,7 @@ export function mathieuEquationSnapshot(): CircuitSnapshot {
     c(8, 'pot_q', 'out', 'mathieu_v', 'in3'),
   ]
 
-  return {
-    nodes,
-    cables,
-    mode: 'ic',
-    powered: true,
-    timeScale: 2,
-    time: 0,
-    panelButton: 'pause',
-  }
-}
-
-function c(
-  n: number,
-  fromId: string,
-  fromPort: string,
-  toId: string,
-  toPort: string,
-): Cable {
-  return {
-    id: `cable_${n}`,
-    from: { nodeId: fromId, port: fromPort },
-    to: { nodeId: toId, port: toPort },
-  }
+  return baseSnapshot(nodes, cables, { timeScale: 2 })
 }
 
 export function loadMathieuEquation() {

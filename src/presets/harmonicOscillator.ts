@@ -1,7 +1,13 @@
 import { createNode } from '../engine/elements'
 import { fromSnapshot } from '../engine/circuit'
 import { defaultJumpers, upsertJumper } from '../engine/jumpers'
-import type { CircuitSnapshot, JumperPlacement } from '../engine/types'
+import type { JumperPlacement } from '../engine/types'
+import {
+  baseSnapshot,
+  cable as c,
+  integratorNode,
+  referenceNodes,
+} from './helpers'
 
 /**
  * Classic harmonic oscillator using two inverting integrators,
@@ -10,16 +16,12 @@ import type { CircuitSnapshot, JumperPlacement } from '../engine/types'
  * Faceplate mapping: amps 01 & 02 (switchable slots 0,1) as integrators,
  * amp 03 as inverter.
  */
-export function harmonicOscillatorSnapshot(): CircuitSnapshot {
-  const int1 = createNode('integrator', 'int_1', 'Int 1 (x)', 280, 80, {
-    initialCondition: 8,
-    state: 8,
+export function harmonicOscillatorSnapshot() {
+  const int1 = integratorNode('int_1', 'Int 1 (x)', 280, 80, 8, {
     timeFactor: 1,
     ampSlot: 0,
   })
-  const int2 = createNode('integrator', 'int_2', 'Int 2 (y)', 280, 240, {
-    initialCondition: 0,
-    state: 0,
+  const int2 = integratorNode('int_2', 'Int 2 (y)', 280, 240, 0, {
     timeFactor: 1,
     ampSlot: 1,
   })
@@ -30,37 +32,13 @@ export function harmonicOscillatorSnapshot(): CircuitSnapshot {
     coefficient: 1,
   })
 
-  const nodes = [
-    createNode('reference', 'ref_p10', '+10 V', 40, 40, { voltage: 10 }),
-    createNode('reference', 'ref_m10', '−10 V', 40, 120, { voltage: -10 }),
-    createNode('reference', 'ref_gnd', 'Ground', 40, 200, { voltage: 0 }),
-    int1,
-    int2,
-    inv1,
-    pot1,
-  ]
+  const nodes = [...referenceNodes(), int1, int2, inv1, pot1]
 
   const cables = [
-    {
-      id: 'cable_1',
-      from: { nodeId: 'int_2', port: 'out' },
-      to: { nodeId: 'int_1', port: 'in0' },
-    },
-    {
-      id: 'cable_2',
-      from: { nodeId: 'int_1', port: 'out' },
-      to: { nodeId: 'inv_1', port: 'in' },
-    },
-    {
-      id: 'cable_3',
-      from: { nodeId: 'inv_1', port: 'out' },
-      to: { nodeId: 'pot_1', port: 'in' },
-    },
-    {
-      id: 'cable_4',
-      from: { nodeId: 'pot_1', port: 'out' },
-      to: { nodeId: 'int_2', port: 'in0' },
-    },
+    c(1, 'int_2', 'out', 'int_1', 'in0'),
+    c(2, 'int_1', 'out', 'inv_1', 'in'),
+    c(3, 'inv_1', 'out', 'pot_1', 'in'),
+    c(4, 'pot_1', 'out', 'int_2', 'in0'),
   ]
 
   let jumpers: JumperPlacement[] = defaultJumpers()
@@ -79,16 +57,7 @@ export function harmonicOscillatorSnapshot(): CircuitSnapshot {
     })
   }
 
-  return {
-    nodes,
-    cables,
-    mode: 'ic',
-    powered: true,
-    timeScale: 1,
-    time: 0,
-    jumpers,
-    panelButton: 'pause',
-  }
+  return baseSnapshot(nodes, cables, { jumpers })
 }
 
 export function loadHarmonicOscillator() {

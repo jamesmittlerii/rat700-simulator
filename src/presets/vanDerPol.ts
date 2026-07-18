@@ -1,6 +1,13 @@
 import { createNode } from '../engine/elements'
 import { fromSnapshot } from '../engine/circuit'
-import type { Cable, CircuitNode, CircuitSnapshot } from '../engine/types'
+import type { CircuitNode } from '../engine/types'
+import {
+  baseSnapshot,
+  cable as c,
+  integratorNode,
+  potK1,
+  referenceNodes,
+} from './helpers'
 
 /**
  * Van der Pol oscillator — non-linear damping that converges to a limit cycle.
@@ -22,22 +29,12 @@ const TF = 10
 const IC_X = 0.3
 const IC_V = 0
 
-export function vanDerPolSnapshot(): CircuitSnapshot {
+export function vanDerPolSnapshot() {
   const nodes: CircuitNode[] = [
-    createNode('reference', 'ref_p10', '+10 V', 40, 40, { voltage: 10 }),
-    createNode('reference', 'ref_m10', '−10 V', 40, 120, { voltage: -10 }),
-    createNode('reference', 'ref_gnd', 'Ground', 40, 200, { voltage: 0 }),
+    ...referenceNodes(),
 
-    createNode('integrator', 'vdp_x', 'Int x', 360, 80, {
-      initialCondition: IC_X,
-      state: IC_X,
-      timeFactor: TF,
-    }),
-    createNode('integrator', 'vdp_v', 'Int v = ẋ', 360, 260, {
-      initialCondition: IC_V,
-      state: IC_V,
-      timeFactor: TF,
-    }),
+    integratorNode('vdp_x', 'Int x', 360, 80, IC_X, { timeFactor: TF }),
+    integratorNode('vdp_v', 'Int v = ẋ', 360, 260, IC_V, { timeFactor: TF }),
 
     createNode('multiplier', 'mult_x2', 'x²', 160, 440),
     createNode('multiplier', 'mult_uv', '(1−x²)·v', 620, 440),
@@ -46,20 +43,20 @@ export function vanDerPolSnapshot(): CircuitSnapshot {
     createNode('summer', 'sum_u', '1 − x²', 500, 440),
 
     createNode('potentiometer', 'pot_one', '−1 const', 340, 520, {
-      coefficient: 0.1,
+      coefficient: potK1(1, TF),
     }),
     createNode('potentiometer', 'pot_dx', '1/TF (v→x)', 240, 120, {
-      coefficient: 0.1,
+      coefficient: potK1(1, TF),
     }),
     createNode('potentiometer', 'pot_mu', 'μ (uv→v)', 760, 300, {
-      coefficient: MU / TF,
+      coefficient: potK1(MU, TF),
     }),
     createNode('potentiometer', 'pot_kx', '1/TF (x→v)', 240, 300, {
-      coefficient: 0.1,
+      coefficient: potK1(1, TF),
     }),
   ]
 
-  const cables: Cable[] = [
+  const cables = [
     // x² = mult_x2 (out −x²/10); inv_x2 = +x²/10 for the u summer.
     c(1, 'vdp_x', 'out', 'mult_x2', 'xp'),
     c(2, 'vdp_x', 'out', 'mult_x2', 'yp'),
@@ -86,29 +83,7 @@ export function vanDerPolSnapshot(): CircuitSnapshot {
     c(15, 'pot_kx', 'out', 'vdp_v', 'in1'),
   ]
 
-  return {
-    nodes,
-    cables,
-    mode: 'ic',
-    powered: true,
-    timeScale: 2.5,
-    time: 0,
-    panelButton: 'pause',
-  }
-}
-
-function c(
-  n: number,
-  fromId: string,
-  fromPort: string,
-  toId: string,
-  toPort: string,
-): Cable {
-  return {
-    id: `cable_${n}`,
-    from: { nodeId: fromId, port: fromPort },
-    to: { nodeId: toId, port: toPort },
-  }
+  return baseSnapshot(nodes, cables, { timeScale: 2.5 })
 }
 
 export function loadVanDerPol() {

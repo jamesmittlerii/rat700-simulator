@@ -2,7 +2,12 @@ import { createNode } from '../engine/elements'
 import { CAR_BODY_BREAKPOINTS } from '../engine/functionGenerator'
 import { fromSnapshot } from '../engine/circuit'
 import { defaultJumpers, upsertJumper } from '../engine/jumpers'
-import type { Cable, CircuitNode, CircuitSnapshot, JumperPlacement } from '../engine/types'
+import type { Cable, CircuitNode, JumperPlacement } from '../engine/types'
+import {
+  baseSnapshot,
+  cable as c,
+  referenceNodes,
+} from './helpers'
 
 export type SuspensionDamping = 'firm' | 'soft'
 
@@ -23,9 +28,7 @@ export type SuspensionDamping = 'firm' | 'soft'
  *
  * @see https://www.analogmuseum.org/english/examples/vehicle_simulation/
  */
-export function vehicleSuspensionSnapshot(
-  damping: SuspensionDamping = 'firm',
-): CircuitSnapshot {
+export function vehicleSuspensionSnapshot(damping: SuspensionDamping = 'firm') {
   // Real-time (timeScale 1): physics ∫s use timeFactor 10 so body bounce
   // sits near ~1.5 Hz (α≈0.85 → ω≈10√α). Road ≈ 30 mph / 3 m bumps (~4.5 Hz).
   const beta = damping === 'firm' ? 1 : 0.35
@@ -35,9 +38,7 @@ export function vehicleSuspensionSnapshot(
   // Computing amps in faceplate strip order (ampSlot / layout idx 0…14).
   // Switchable strips: 0,1,4,5,9,10,13,14 — hold all 6∫ plus sum_a2 & sum_yw.
   const nodes: CircuitNode[] = [
-    createNode('reference', 'ref_p10', '+10 V', 20, 20, { voltage: 10 }),
-    createNode('reference', 'ref_m10', '−10 V', 20, 90, { voltage: -10 }),
-    createNode('reference', 'ref_gnd', 'Ground', 20, 160, { voltage: 0 }),
+    ...referenceNodes({ x: 20, y: 20, dy: 70 }),
     createNode('signal', 'road', 'RG-1 road noise', 20, 260, {
       waveform: 'road',
       amplitude: 0.013,
@@ -203,30 +204,7 @@ export function vehicleSuspensionSnapshot(
     })
   }
 
-  return {
-    nodes,
-    cables,
-    mode: 'ic',
-    powered: true,
-    timeScale: 1,
-    time: 0,
-    panelButton: 'pause',
-    jumpers,
-  }
-}
-
-function c(
-  n: number,
-  fromId: string,
-  fromPort: string,
-  toId: string,
-  toPort: string,
-): Cable {
-  return {
-    id: `cable_${n}`,
-    from: { nodeId: fromId, port: fromPort },
-    to: { nodeId: toId, port: toPort },
-  }
+  return baseSnapshot(nodes, cables, { timeScale: 1, jumpers })
 }
 
 export function loadVehicleSuspension(damping: SuspensionDamping = 'firm') {

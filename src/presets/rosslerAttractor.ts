@@ -1,6 +1,15 @@
 import { createNode } from '../engine/elements'
 import { fromSnapshot } from '../engine/circuit'
-import type { Cable, CircuitNode, CircuitSnapshot } from '../engine/types'
+import type { CircuitNode } from '../engine/types'
+import {
+  baseSnapshot,
+  cable as c,
+  integratorNode,
+  potK1,
+  potK10,
+  potKMul10,
+  referenceNodes,
+} from './helpers'
 
 /**
  * Rössler attractor — the "folded ribbon" chaos, lighter than Lorenz (a single
@@ -29,36 +38,17 @@ const B = 0.2
 const C = 5.7
 const TF = 10
 
-/** Linear coefficient → pot for a gain-1 integrator input. */
-const k1 = (coeff: number) => coeff / TF
-/** Multiplier-fed gain-10 input (the multiplier pre-divides by the unit). */
-const kMul10 = (coeff: number) => coeff / TF
-
 const IC_X = 2 / SX
 const IC_Y = 2 / SY
 const IC_Z = 0
 
-export function rosslerAttractorSnapshot(): CircuitSnapshot {
+export function rosslerAttractorSnapshot() {
   const nodes: CircuitNode[] = [
-    createNode('reference', 'ref_p10', '+10 V', 40, 40, { voltage: 10 }),
-    createNode('reference', 'ref_m10', '−10 V', 40, 120, { voltage: -10 }),
-    createNode('reference', 'ref_gnd', 'Ground', 40, 200, { voltage: 0 }),
+    ...referenceNodes(),
 
-    createNode('integrator', 'ross_x', 'Int x', 360, 80, {
-      initialCondition: IC_X,
-      state: IC_X,
-      timeFactor: TF,
-    }),
-    createNode('integrator', 'ross_y', 'Int y', 360, 260, {
-      initialCondition: IC_Y,
-      state: IC_Y,
-      timeFactor: TF,
-    }),
-    createNode('integrator', 'ross_z', 'Int z', 360, 440, {
-      initialCondition: IC_Z,
-      state: IC_Z,
-      timeFactor: TF,
-    }),
+    integratorNode('ross_x', 'Int x', 360, 80, IC_X, { timeFactor: TF }),
+    integratorNode('ross_y', 'Int y', 360, 260, IC_Y, { timeFactor: TF }),
+    integratorNode('ross_z', 'Int z', 360, 440, IC_Z, { timeFactor: TF }),
 
     createNode('inverter', 'inv_x', '−x', 600, 80),
     createNode('inverter', 'inv_y', '−y', 600, 20),
@@ -67,31 +57,31 @@ export function rosslerAttractorSnapshot(): CircuitSnapshot {
 
     // v̇X = −vY − 2·vZ
     createNode('potentiometer', 'pot_xy', 'Sy/Sx (y→x)', 520, 120, {
-      coefficient: k1(SY / SX),
+      coefficient: potK1(SY / SX, TF),
     }),
     createNode('potentiometer', 'pot_xz', 'Sz/Sx (z→x)', 520, 160, {
-      coefficient: k1(SZ / SX),
+      coefficient: potK1(SZ / SX, TF),
     }),
     // v̇Y = vX + a·vY  (a is regenerative positive feedback)
     createNode('potentiometer', 'pot_yx', 'Sx/Sy (x→y)', 520, 240, {
-      coefficient: k1(SX / SY),
+      coefficient: potK1(SX / SY, TF),
     }),
     createNode('potentiometer', 'pot_ya', 'a (y→y)', 520, 280, {
-      coefficient: k1(A),
+      coefficient: potK1(A, TF),
     }),
     // v̇Z = 0.05 + 2·vX·vZ − 5.7·vZ
     createNode('potentiometer', 'pot_zc', 'c (z decay)', 520, 420, {
-      coefficient: k1(C),
+      coefficient: potK1(C, TF),
     }),
     createNode('potentiometer', 'pot_zb', 'b/Sz (const)', 520, 460, {
-      coefficient: (B / SZ) / TF / 10,
+      coefficient: potK10(B / SZ, TF),
     }),
     createNode('potentiometer', 'pot_zxz', 'Sx (xz→z)', 520, 500, {
-      coefficient: kMul10(SX),
+      coefficient: potKMul10(SX, TF),
     }),
   ]
 
-  const cables: Cable[] = [
+  const cables = [
     c(1, 'ross_x', 'out', 'inv_x', 'in'), // −vX
     c(2, 'ross_y', 'out', 'inv_y', 'in'), // −vY
 
@@ -119,29 +109,7 @@ export function rosslerAttractorSnapshot(): CircuitSnapshot {
     c(18, 'pot_zxz', 'out', 'ross_z', 'in3'),
   ]
 
-  return {
-    nodes,
-    cables,
-    mode: 'ic',
-    powered: true,
-    timeScale: 2,
-    time: 0,
-    panelButton: 'pause',
-  }
-}
-
-function c(
-  n: number,
-  fromId: string,
-  fromPort: string,
-  toId: string,
-  toPort: string,
-): Cable {
-  return {
-    id: `cable_${n}`,
-    from: { nodeId: fromId, port: fromPort },
-    to: { nodeId: toId, port: toPort },
-  }
+  return baseSnapshot(nodes, cables, { timeScale: 2 })
 }
 
 export function loadRosslerAttractor() {
