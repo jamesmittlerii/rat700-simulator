@@ -9,6 +9,16 @@ import { defaultFgBreakpoints } from './functionGenerator'
 
 export { signalOutput } from './roadNoise'
 
+/** Shared summer/integrator pad inputs (e–k / in0–in4 + S). */
+const AMP_PAD_INPUTS: PortDef[] = [
+  { name: 'in0', direction: 'in', jack: 'green', label: 'In1 (e)' },
+  { name: 'in1', direction: 'in', jack: 'green', label: 'In2 (f)' },
+  { name: 'in2', direction: 'in', jack: 'green', label: 'In3 (g)' },
+  { name: 'in3', direction: 'in', jack: 'green', label: 'In4 (h×10)' },
+  { name: 'in4', direction: 'in', jack: 'green', label: 'In5 (i×10)' },
+  { name: 's', direction: 'in', jack: 'white', label: 'S (k)' },
+]
+
 /**
  * Port definitions for each element kind.
  * Summer/integrator expose RAT pad ports: e,f,g (gain 1), h,i (gain 10), k (S),
@@ -36,24 +46,14 @@ export function portsFor(kind: ElementKind, node?: CircuitNode): PortDef[] {
       ]
     case 'summer':
       return [
-        { name: 'in0', direction: 'in', jack: 'green', label: 'In1 (e)' },
-        { name: 'in1', direction: 'in', jack: 'green', label: 'In2 (f)' },
-        { name: 'in2', direction: 'in', jack: 'green', label: 'In3 (g)' },
-        { name: 'in3', direction: 'in', jack: 'green', label: 'In4 (h×10)' },
-        { name: 'in4', direction: 'in', jack: 'green', label: 'In5 (i×10)' },
-        { name: 's', direction: 'in', jack: 'white', label: 'S (k)' },
+        ...AMP_PAD_INPUTS,
         { name: 'r', direction: 'in', jack: 'white', label: 'R' },
         { name: 'g', direction: 'in', jack: 'white', label: 'G' },
         { name: 'out', direction: 'out', jack: 'red', label: 'Out' },
       ]
     case 'integrator':
       return [
-        { name: 'in0', direction: 'in', jack: 'green', label: 'In1 (e)' },
-        { name: 'in1', direction: 'in', jack: 'green', label: 'In2 (f)' },
-        { name: 'in2', direction: 'in', jack: 'green', label: 'In3 (g)' },
-        { name: 'in3', direction: 'in', jack: 'green', label: 'In4 (h×10)' },
-        { name: 'in4', direction: 'in', jack: 'green', label: 'In5 (i×10)' },
-        { name: 's', direction: 'in', jack: 'white', label: 'S (k)' },
+        ...AMP_PAD_INPUTS,
         { name: 'ic', direction: 'in', jack: 'white', label: 'IC (A)' },
         { name: 'out', direction: 'out', jack: 'red', label: 'Out' },
       ]
