@@ -12,6 +12,10 @@ import {
   loadDuffingOscillator,
   DUFFING_SCOPE_CHANNELS,
 } from './duffingOscillator'
+import {
+  loadSoftSpringThreeBody,
+  SOFT_SPRING_SCOPE_CHANNELS,
+} from './softSpringThreeBody'
 
 interface Trace {
   min: Record<string, number>
@@ -147,5 +151,42 @@ describe('Duffing oscillator preset', () => {
   it('exposes an x–ẋ scope channel', () => {
     expect(DUFFING_SCOPE_CHANNELS[0]?.xNode).toBe('duffing_x')
     expect(DUFFING_SCOPE_CHANNELS[0]?.yNode).toBe('duffing_v')
+  })
+})
+
+describe('Soft-spring three-body preset', () => {
+  it('uses four multipliers (xA³ and yA³)', () => {
+    expect(countMultipliers(loadSoftSpringThreeBody().nodes)).toBe(4)
+  })
+
+  it('keeps both bodies bounded and oscillating without overload', () => {
+    const t = simulate(
+      loadSoftSpringThreeBody,
+      ['ss3_xA', 'ss3_yA', 'ss3_xB', 'ss3_yB'],
+      12_000,
+      0.004,
+    )
+    const maxAbs = Math.max(
+      Math.abs(t.min['ss3_xA']!),
+      Math.abs(t.max['ss3_xA']!),
+      Math.abs(t.min['ss3_yA']!),
+      Math.abs(t.max['ss3_yA']!),
+      Math.abs(t.min['ss3_xB']!),
+      Math.abs(t.max['ss3_xB']!),
+      Math.abs(t.min['ss3_yB']!),
+      Math.abs(t.max['ss3_yB']!),
+    )
+    expect(t.overloads).toBe(0)
+    expect(maxAbs).toBeLessThan(OVERLOAD_THRESHOLD)
+    // Sustained planar motion on A (the scoped body).
+    expect(t.signChanges['ss3_xA']!).toBeGreaterThan(5)
+    expect(t.signChanges['ss3_yA']!).toBeGreaterThan(5)
+    expect(t.max['ss3_xA']!).toBeGreaterThan(1)
+    expect(t.min['ss3_xA']!).toBeLessThan(-1)
+  }, 20_000)
+
+  it('exposes an xA–yA scope channel', () => {
+    expect(SOFT_SPRING_SCOPE_CHANNELS[0]?.xNode).toBe('ss3_xA')
+    expect(SOFT_SPRING_SCOPE_CHANNELS[0]?.yNode).toBe('ss3_yA')
   })
 })

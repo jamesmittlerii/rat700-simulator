@@ -26,6 +26,7 @@ interface ControlsProps {
   readonly onLoadVanDerPol: () => void
   readonly onLoadMathieu: () => void
   readonly onLoadDuffing: () => void
+  readonly onLoadSoftSpring: () => void
   readonly onSave: () => void
   readonly onLoad: () => void
   readonly onClear: () => void
@@ -42,6 +43,7 @@ interface ControlsProps {
     | 'vanDerPol'
     | 'mathieu'
     | 'duffing'
+    | 'softSpring'
     | null
   readonly status?: string
 }
@@ -63,6 +65,7 @@ export function Controls({
   onLoadVanDerPol,
   onLoadMathieu,
   onLoadDuffing,
+  onLoadSoftSpring,
   onSave,
   onLoad,
   onClear,
@@ -242,6 +245,13 @@ export function Controls({
             onClick={onLoadDuffing}
           >
             Duffing oscillator
+          </button>
+          <button
+            type="button"
+            className={activePreset === 'softSpring' ? 'btn primary' : 'btn'}
+            onClick={onLoadSoftSpring}
+          >
+            Soft-spring 3-body
           </button>
           <button type="button" className="btn" onClick={onSave}>
             Save patch

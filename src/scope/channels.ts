@@ -5,6 +5,7 @@ import { ROSSLER_SCOPE_CHANNELS } from '../presets/rosslerAttractor'
 import { VAN_DER_POL_SCOPE_CHANNELS } from '../presets/vanDerPol'
 import { MATHIEU_SCOPE_CHANNELS } from '../presets/mathieuEquation'
 import { DUFFING_SCOPE_CHANNELS } from '../presets/duffingOscillator'
+import { SOFT_SPRING_SCOPE_CHANNELS } from '../presets/softSpringThreeBody'
 
 export interface ScopeChannel {
   id: string
@@ -59,6 +60,9 @@ export function scopeChannelsFor(nodes: CircuitNode[]): ScopeChannel[] {
   }
   if (ids.has('duffing_x') && ids.has('duffing_v')) {
     return [...DUFFING_SCOPE_CHANNELS]
+  }
+  if (ids.has('ss3_xA') && ids.has('ss3_yA')) {
+    return [...SOFT_SPRING_SCOPE_CHANNELS]
   }
   if (ids.has('int_1') && ids.has('int_2')) {
     return OSCILLATOR_SCOPE_CHANNELS

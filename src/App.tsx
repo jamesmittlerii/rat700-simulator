@@ -39,6 +39,10 @@ import { loadRosslerAttractor, ROSSLER_NODES } from './presets/rosslerAttractor'
 import { loadVanDerPol, VAN_DER_POL_NODES } from './presets/vanDerPol'
 import { loadMathieuEquation, MATHIEU_NODES } from './presets/mathieuEquation'
 import { loadDuffingOscillator, DUFFING_NODES } from './presets/duffingOscillator'
+import {
+  loadSoftSpringThreeBody,
+  SOFT_SPRING_NODES,
+} from './presets/softSpringThreeBody'
 import { Controls } from './ui/Controls'
 import { FrontPanel } from './ui/FrontPanel'
 import { SchematicCanvas } from './ui/SchematicCanvas'
@@ -74,6 +78,7 @@ export default function App() {
     | 'vanDerPol'
     | 'mathieu'
     | 'duffing'
+    | 'softSpring'
     | null
   >('vehicle-firm')
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(() => {
@@ -301,6 +306,14 @@ export default function App() {
           setSelectedId(DUFFING_NODES.x)
           setActivePreset('duffing')
           setStatus('Loaded Duffing oscillator — press Compute (Operate).')
+        }}
+        onLoadSoftSpring={() => {
+          commitMachine(loadSoftSpringThreeBody())
+          setSelectedId(SOFT_SPRING_NODES.xA)
+          setActivePreset('softSpring')
+          setStatus(
+            'Loaded soft-spring three-body — press Compute (Operate).',
+          )
         }}
         onSave={handleSave}
         onLoad={handleLoadSaved}
