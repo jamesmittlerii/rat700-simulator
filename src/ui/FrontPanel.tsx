@@ -114,6 +114,12 @@ export function FrontPanel({
   const meterDeflection = potCalMeter(machine)
   const alert = machine.lastEval.warning
   const overloaded = machine.lastEval.overloaded.size > 0
+  let meterCaption = 'Kompensation'
+  if (machine.mode === 'potSet') {
+    meterCaption = machine.calibratePotId
+      ? 'Nullabgleich'
+      : 'Pot. Einst. — Kanal wählen'
+  }
 
   return (
     <div className={`front-panel v2 ${machine.powered ? 'powered' : ''}`}>
@@ -205,13 +211,7 @@ export function FrontPanel({
             value={
               machine.mode === 'potSet' ? meterDeflection : 0
             }
-            caption={
-              machine.mode === 'potSet'
-                ? machine.calibratePotId
-                  ? 'Nullabgleich'
-                  : 'Pot. Einst. — Kanal wählen'
-                : 'Kompensation'
-            }
+            caption={meterCaption}
           />
           <label className="fp-master-ref">
             <span>R11 Master (10-turn)</span>
@@ -275,7 +275,7 @@ function FunctionGeneratorField({
       <div className="fp-fg-scale" aria-hidden>
         <span className="fp-fg-scale-spacer" />
         {scaleLabels.map((lab, i) => (
-          <span key={i} className="fp-fg-scale-tick">
+          <span key={`tick-${equidistantX(i)}`} className="fp-fg-scale-tick">
             {lab}
           </span>
         ))}
@@ -297,7 +297,7 @@ function FunctionGeneratorField({
                 const k = (pt.y + MACHINE_UNIT) / (2 * MACHINE_UNIT)
                 return (
                   <FgKnob
-                    key={i}
+                    key={`${name}-x-${equidistantX(i)}`}
                     index={i}
                     value={pt.y}
                     k={k}
@@ -665,6 +665,9 @@ function PatchBay({
 
       <div
         ref={bayRef}
+        role="grid"
+        aria-label="Patchbay"
+        tabIndex={0}
         className={`fp-patchbay v2${dragFrom ? ' patching' : ''}${jumperTool ? ' jumper-mode' : ''}`}
         style={{
           gridTemplateColumns: `repeat(${PATCH_COLS}, 1fr)`,
@@ -679,6 +682,9 @@ function PatchBay({
           }
         }}
         onClick={() => setMenu(null)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setMenu(null)
+        }}
       >
         <svg
           className="fp-patch-silk"
@@ -686,9 +692,9 @@ function PatchBay({
           preserveAspectRatio="none"
           aria-hidden
         >
-          {silkSections.map((s, i) => (
+          {silkSections.map((s) => (
             <line
-              key={`section-${i}`}
+              key={`section-${s.x1}-${s.y1}-${s.x2}-${s.y2}`}
               x1={s.x1}
               y1={s.y1}
               x2={s.x2}
@@ -696,9 +702,9 @@ function PatchBay({
               className="fp-silk-section"
             />
           ))}
-          {silkTies.map((s, i) => (
+          {silkTies.map((s) => (
             <line
-              key={`silk-${i}`}
+              key={`silk-${s.x1}-${s.y1}-${s.x2}-${s.y2}`}
               x1={s.x1}
               y1={s.y1}
               x2={s.x2}
@@ -936,9 +942,11 @@ function PatchBay({
 
           if (!live) {
             return (
-              <div
+              <button
+                type="button"
                 key={`${c.col},${c.row}`}
                 className={`fp-jack-cell${jumperTarget ? ' jumper-target' : ''}`}
+                title={c.label || c.jackId}
                 onClick={(e) => {
                   e.stopPropagation()
                   if (jumperTool) placeJumperOnCol(c.col)
@@ -947,9 +955,9 @@ function PatchBay({
                 {mark}
                 <span
                   className={`fp-jack color-${c.color} unused`}
-                  title={c.label || c.jackId}
+                  aria-hidden
                 />
-              </div>
+              </button>
             )
           }
 
@@ -972,9 +980,15 @@ function PatchBay({
 
         {menu && (
           <div
+            role="menu"
+            aria-label="Cable actions"
+            tabIndex={-1}
             className="fp-cable-menu"
             style={{ left: menu.x, top: menu.y }}
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setMenu(null)
+            }}
           >
             <button
               type="button"

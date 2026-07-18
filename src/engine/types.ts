@@ -35,8 +35,6 @@ export interface Breakpoint {
 
 export type PortDirection = 'in' | 'out'
 
-export type InputGain = number
-
 export interface PortRef {
   nodeId: string
   port: string
@@ -87,7 +85,7 @@ export interface CircuitNode {
   /** Default IC when no IC jack is patched. */
   initialCondition?: number
   /** Per-input gains for summer/integrator (port name → gain). */
-  inputGains?: Record<string, InputGain>
+  inputGains?: Record<string, number>
   /** Integrator time-constant factor from jumper (default 1). */
   timeFactor?: TimeFactor
   /** Signal generator waveform. */
@@ -153,5 +151,19 @@ export function panelButtonToMode(button: PanelButton): MachineMode {
       return 'potSet'
     case 'fremd':
       return 'hold'
+  }
+}
+
+/** Best-effort inverse for snapshots that omit panelButton. */
+export function panelButtonFromMode(mode: MachineMode): PanelButton {
+  switch (mode) {
+    case 'operate':
+      return 'dauer'
+    case 'hold':
+      return 'halt'
+    case 'potSet':
+      return 'potSet'
+    case 'ic':
+      return 'pause'
   }
 }

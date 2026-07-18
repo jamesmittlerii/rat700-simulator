@@ -1,7 +1,6 @@
 import type {
   CircuitNode,
   ElementKind,
-  InputGain,
   PortDef,
   TimeFactor,
 } from './types'
@@ -19,7 +18,9 @@ export function portsFor(kind: ElementKind, node?: CircuitNode): PortDef[] {
   switch (kind) {
     case 'reference': {
       const v = node?.voltage ?? MACHINE_UNIT
-      const jack = v > 0 ? 'red' : v < 0 ? 'blue' : 'black'
+      let jack: PortDef['jack'] = 'black'
+      if (v > 0) jack = 'red'
+      else if (v < 0) jack = 'blue'
       return [{ name: 'out', direction: 'out', jack, label: 'Out' }]
     }
     case 'potentiometer':
@@ -75,7 +76,7 @@ export function portsFor(kind: ElementKind, node?: CircuitNode): PortDef[] {
   }
 }
 
-export function defaultInputGains(kind: ElementKind): Record<string, InputGain> {
+export function defaultInputGains(kind: ElementKind): Record<string, number> {
   if (kind === 'summer' || kind === 'integrator') {
     return { in0: 1, in1: 1, in2: 1, in3: 10, in4: 10, s: 1 }
   }

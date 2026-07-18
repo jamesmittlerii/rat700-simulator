@@ -167,7 +167,7 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
   const pots = nodes.filter((n) => n.kind === 'potentiometer').slice(0, POT_SLOTS)
   const fgs = nodes.filter((n) => n.kind === 'functionGenerator').slice(0, 2)
   const mults = nodes.filter((n) => n.kind === 'multiplier').slice(0, 4)
-  const signals = nodes.filter((n) => n.kind === 'signal')
+  const road = nodes.find((n) => n.kind === 'signal')
   const refP = nodes.find((n) => n.kind === 'reference' && n.voltage === 10)
   const refM = nodes.find((n) => n.kind === 'reference' && n.voltage === -10)
   const refG = nodes.find((n) => n.kind === 'reference' && n.voltage === 0)
@@ -718,7 +718,6 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
 
   // verfügbar — spare jack field row p cols 1–6 (pink). Road/signal out on p1 only.
   const pRow = rowIndex('p')
-  const road = signals[0]
   for (const col1 of [1, 2, 3, 4, 5, 6]) {
     if (col1 === 1 && road) {
       forcePlace(
@@ -805,20 +804,26 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
 
   for (const n of nodes) {
     if (n.kind === 'reference') continue
-    const essential =
-      n.kind === 'inverter'
-        ? ['in', 'out']
-        : n.kind === 'potentiometer'
-          ? ['in', 'out']
-          : n.kind === 'integrator'
-            ? ['in0', 'in1', 'ic', 'out']
-            : n.kind === 'summer'
-              ? ['in0', 'in1', 'in2', 'out']
-              : n.kind === 'functionGenerator' || n.kind === 'multiplier'
-                ? portsFor(n.kind, n).map((p) => p.name)
-                : n.kind === 'signal'
-                  ? ['out']
-                  : ['out']
+    let essential: string[]
+    switch (n.kind) {
+      case 'inverter':
+      case 'potentiometer':
+        essential = ['in', 'out']
+        break
+      case 'integrator':
+        essential = ['in0', 'in1', 'ic', 'out']
+        break
+      case 'summer':
+        essential = ['in0', 'in1', 'in2', 'out']
+        break
+      case 'functionGenerator':
+      case 'multiplier':
+        essential = portsFor(n.kind, n).map((p) => p.name)
+        break
+      default:
+        essential = ['out']
+        break
+    }
     for (const name of essential) {
       const p = portsFor(n.kind, n).find((x) => x.name === name)
       if (!p) continue

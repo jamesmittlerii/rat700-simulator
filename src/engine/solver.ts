@@ -13,7 +13,6 @@ import {
   OVERLOAD_THRESHOLD,
   type Cable,
   type CircuitNode,
-  type InputGain,
   type MachineMode,
   portKey,
   type PortRef,
@@ -30,7 +29,7 @@ export interface EvalResult {
 const SUM_PORTS = ['in0', 'in1', 'in2', 'in3', 'in4', 's'] as const
 const INT_PORTS = ['in0', 'in1', 'in2', 'in3', 'in4', 's'] as const
 
-function gainFor(node: CircuitNode, port: string): InputGain {
+function gainFor(node: CircuitNode, port: string): number {
   return node.inputGains?.[port] ?? 1
 }
 

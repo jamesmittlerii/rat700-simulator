@@ -39,10 +39,11 @@ function jackPosition(
   const idx = sidePorts.findIndex((p) => p.name === portName)
   const count = Math.max(sidePorts.length, 1)
   const h = NODE_H_BASE + Math.max(0, count - 2) * 16
+  const safeIdx = Math.max(0, idx)
   const y =
     count <= 1
       ? nodeY + h / 2
-      : nodeY + 28 + (idx >= 0 ? idx : 0) * ((h - 36) / (count - 1))
+      : nodeY + 28 + safeIdx * ((h - 36) / (count - 1))
   const x = direction === 'in' ? nodeX : nodeX + NODE_W
   return { x, y }
 }

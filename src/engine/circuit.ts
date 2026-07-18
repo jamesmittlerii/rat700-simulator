@@ -16,6 +16,7 @@ import {
   MAX_MULTIPLIERS,
   MAX_POTENTIOMETERS,
   OVERLOAD_THRESHOLD,
+  panelButtonFromMode,
   panelButtonToMode,
   type Cable,
   type CircuitNode,
@@ -210,12 +211,9 @@ export function stepMachine(
   const machineDt = wallDt * machine.timeScale
   const steps =
     opts?.stepsPerFrame ?? machine.stepsPerFrame ?? DEFAULT_STEPS_PER_FRAME
-  const maxSub =
-    captureScope && fineScope
-      ? 0.0005
-      : captureScope
-        ? 0.002
-        : Math.max(1e-4, machineDt / Math.max(1, steps))
+  let maxSub = Math.max(1e-4, machineDt / Math.max(1, steps))
+  if (captureScope && fineScope) maxSub = 0.0005
+  else if (captureScope) maxSub = 0.002
 
   let remaining = machineDt
   if (machine.einmalRemaining != null) {
@@ -750,7 +748,7 @@ export function fromSnapshot(snap: CircuitSnapshot): MachineState {
     lastEval,
     idCounter: maxId + 1,
     jumpers: snap.jumpers ?? defaultJumpers(),
-    panelButton: snap.panelButton ?? (snap.mode === 'operate' ? 'dauer' : snap.mode === 'hold' ? 'halt' : snap.mode === 'potSet' ? 'potSet' : 'pause'),
+    panelButton: snap.panelButton ?? panelButtonFromMode(snap.mode),
     masterRef: snap.masterRef ?? 0.5,
     calibratePotId: snap.calibratePotId ?? null,
     autoShutdown: snap.autoShutdown ?? false,
