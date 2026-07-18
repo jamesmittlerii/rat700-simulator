@@ -163,57 +163,135 @@ export function setMode(machine: MachineState, mode: MachineMode): MachineState 
   return next
 }
 
-export function stepMachine(
+function integratorStatesFromEval(
+  nodes: CircuitNode[],
+  voltages: Record<string, number>,
+): Record<string, number> {
+  return Object.fromEntries(
+    nodes
+      .filter((n) => n.kind === 'integrator')
+      .map((n) => [
+        n.id,
+        voltages[portKey({ nodeId: n.id, port: 'out' })] ??
+          n.initialCondition ??
+          0,
+      ]),
+  )
+}
+
+function stepNonOperate(machine: MachineState): MachineState {
+  const ev = evaluateAlgebraic(
+    machine.nodes,
+    machine.cables,
+    machine.states,
+    machine.mode,
+    machine.time,
+  )
+  const states =
+    machine.mode === 'ic' || machine.mode === 'potSet'
+      ? integratorStatesFromEval(machine.nodes, ev.voltages)
+      : machine.states
+  return {
+    ...machine,
+    states,
+    lastEval: ev,
+    phosphorBatch: [],
+    nodes: syncNodesWithStates(machine.nodes, states),
+  }
+}
+
+function scopeSubstepDt(
+  machineDt: number,
+  steps: number,
+  captureScope: boolean,
+  fineScope: boolean,
+): number {
+  let maxSub = Math.max(1e-4, machineDt / Math.max(1, steps))
+  if (captureScope && fineScope) return 0.0005
+  if (captureScope) return 0.002
+  return maxSub
+}
+
+function sampleScopeChannels(
+  voltages: Record<string, number>,
+  channels: ReturnType<typeof scopeChannelsFor>,
+): PhosphorSample['channels'] {
+  const chMap: PhosphorSample['channels'] = {}
+  for (const ch of channels) {
+    const x =
+      (voltages[portKey({ nodeId: ch.xNode, port: 'out' })] ?? 0) *
+        (ch.xScale ?? 1) +
+      (ch.xOffset ?? 0)
+    let y = voltages[portKey({ nodeId: ch.yNode, port: 'out' })] ?? 0
+    y = y * (ch.yScale ?? 1) + (ch.yOffset ?? 0)
+    const addScale = ch.yAddScale ?? 1
+    for (const addId of ch.yAddNodes ?? []) {
+      y += (voltages[portKey({ nodeId: addId, port: 'out' })] ?? 0) * addScale
+    }
+    chMap[ch.id] = { x, y }
+  }
+  return chMap
+}
+
+function ampOverloadTrip(
+  nodes: CircuitNode[],
+  overloaded: Set<string>,
+): boolean {
+  return [...overloaded].some((id) => {
+    const n = nodes.find((x) => x.id === id)
+    return (
+      !!n &&
+      (n.kind === 'integrator' || n.kind === 'summer' || n.kind === 'inverter')
+    )
+  })
+}
+
+function finishEinmalRun(
+  machine: MachineState,
+  states: Record<string, number>,
+  lastEval: EvalResult,
+  time: number,
+  phosphorBatch: PhosphorSample[],
+): MachineState {
+  const ic = setMode(
+    {
+      ...machine,
+      states,
+      lastEval,
+      time,
+      nodes: syncNodesWithStates(machine.nodes, states),
+    },
+    'ic',
+  )
+  return {
+    ...ic,
+    panelButton: 'pause',
+    einmalRemaining: null,
+    phosphorBatch,
+  }
+}
+
+interface OperateFrameResult {
+  states: Record<string, number>
+  lastEval: EvalResult
+  time: number
+  phosphorBatch: PhosphorSample[]
+  einmalRemaining: number | null
+  tripped: boolean
+}
+
+function runOperateFrame(
   machine: MachineState,
   wallDt: number,
   opts?: { captureScope?: boolean; stepsPerFrame?: number },
-): MachineState {
-  if (!machine.powered) return machine
-  if (machine.externalSlave && machine.panelButton === 'fremd') {
-    return {
-      ...machine,
-      phosphorBatch: [],
-    }
-  }
-  if (machine.mode !== 'operate') {
-    const ev = evaluateAlgebraic(
-      machine.nodes,
-      machine.cables,
-      machine.states,
-      machine.mode,
-      machine.time,
-    )
-    const states =
-      machine.mode === 'ic' || machine.mode === 'potSet'
-        ? Object.fromEntries(
-            machine.nodes
-              .filter((n) => n.kind === 'integrator')
-              .map((n) => [
-                n.id,
-                ev.voltages[portKey({ nodeId: n.id, port: 'out' })] ??
-                  n.initialCondition ??
-                  0,
-              ]),
-          )
-        : machine.states
-    return {
-      ...machine,
-      states,
-      lastEval: ev,
-      phosphorBatch: [],
-      nodes: syncNodesWithStates(machine.nodes, states),
-    }
-  }
-
+): OperateFrameResult {
   const channels = scopeChannelsFor(machine.nodes)
   const captureScope = opts?.captureScope === true && channels.length > 0
   const fineScope = channels.some((c) => c.id === 'wheelL')
   const machineDt = wallDt * machine.timeScale
   const steps =
     opts?.stepsPerFrame ?? machine.stepsPerFrame ?? DEFAULT_STEPS_PER_FRAME
-  let maxSub = Math.max(1e-4, machineDt / Math.max(1, steps))
-  if (captureScope && fineScope) maxSub = 0.0005
-  else if (captureScope) maxSub = 0.002
+  const maxSub = scopeSubstepDt(machineDt, steps, captureScope, fineScope)
 
   let remaining = machineDt
   if (machine.einmalRemaining != null) {
@@ -240,83 +318,83 @@ export function stepMachine(
     lastEval = result.eval
     time += dt
     remaining -= dt
-    if (einmalRemaining != null) {
-      einmalRemaining -= dt
-    }
+    if (einmalRemaining != null) einmalRemaining -= dt
 
     if (captureScope) {
-      const chMap: PhosphorSample['channels'] = {}
-      for (const ch of channels) {
-        const x =
-          (lastEval.voltages[portKey({ nodeId: ch.xNode, port: 'out' })] ?? 0) *
-            (ch.xScale ?? 1) +
-          (ch.xOffset ?? 0)
-        let y =
-          lastEval.voltages[portKey({ nodeId: ch.yNode, port: 'out' })] ?? 0
-        y = y * (ch.yScale ?? 1) + (ch.yOffset ?? 0)
-        const addScale = ch.yAddScale ?? 1
-        for (const addId of ch.yAddNodes ?? []) {
-          y +=
-            (lastEval.voltages[portKey({ nodeId: addId, port: 'out' })] ?? 0) *
-            addScale
-        }
-        chMap[ch.id] = {
-          x,
-          y,
-        }
-      }
-      phosphorBatch.push({ t: time, channels: chMap })
+      phosphorBatch.push({
+        t: time,
+        channels: sampleScopeChannels(lastEval.voltages, channels),
+      })
     }
 
-    if (
+    const trip =
       machine.autoShutdown &&
       lastEval.overloaded.size > 0 &&
-      [...lastEval.overloaded].some((id) => {
-        const n = machine.nodes.find((x) => x.id === id)
-        return n && (n.kind === 'integrator' || n.kind === 'summer' || n.kind === 'inverter')
-      })
-    ) {
+      ampOverloadTrip(machine.nodes, lastEval.overloaded)
+    if (trip) {
       return {
-        ...machine,
-        mode: 'hold',
-        panelButton: 'halt',
         states,
         lastEval,
         time,
         phosphorBatch,
         einmalRemaining: null,
-        nodes: syncNodesWithStates(machine.nodes, states),
+        tripped: true,
       }
     }
   }
 
-  if (einmalRemaining != null && einmalRemaining <= 0) {
-    const ic = setMode(
-      {
-        ...machine,
-        states,
-        lastEval,
-        time,
-        nodes: syncNodesWithStates(machine.nodes, states),
-      },
-      'ic',
-    )
-    return {
-      ...ic,
-      panelButton: 'pause',
-      einmalRemaining: null,
-      phosphorBatch,
-    }
-  }
-
   return {
-    ...machine,
     states,
     lastEval,
     time,
     phosphorBatch,
     einmalRemaining,
-    nodes: syncNodesWithStates(machine.nodes, states),
+    tripped: false,
+  }
+}
+
+export function stepMachine(
+  machine: MachineState,
+  wallDt: number,
+  opts?: { captureScope?: boolean; stepsPerFrame?: number },
+): MachineState {
+  if (!machine.powered) return machine
+  if (machine.externalSlave && machine.panelButton === 'fremd') {
+    return { ...machine, phosphorBatch: [] }
+  }
+  if (machine.mode !== 'operate') return stepNonOperate(machine)
+
+  const frame = runOperateFrame(machine, wallDt, opts)
+  if (frame.tripped) {
+    return {
+      ...machine,
+      mode: 'hold',
+      panelButton: 'halt',
+      states: frame.states,
+      lastEval: frame.lastEval,
+      time: frame.time,
+      phosphorBatch: frame.phosphorBatch,
+      einmalRemaining: null,
+      nodes: syncNodesWithStates(machine.nodes, frame.states),
+    }
+  }
+  if (frame.einmalRemaining != null && frame.einmalRemaining <= 0) {
+    return finishEinmalRun(
+      machine,
+      frame.states,
+      frame.lastEval,
+      frame.time,
+      frame.phosphorBatch,
+    )
+  }
+  return {
+    ...machine,
+    states: frame.states,
+    lastEval: frame.lastEval,
+    time: frame.time,
+    phosphorBatch: frame.phosphorBatch,
+    einmalRemaining: frame.einmalRemaining,
+    nodes: syncNodesWithStates(machine.nodes, frame.states),
   }
 }
 

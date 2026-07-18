@@ -99,6 +99,10 @@ export interface PatchCell {
   potSlot?: number
 }
 
+type PlaceFn = (c: PatchCell) => void
+type FreeSpotFn = (preferred?: [number, number][]) => [number, number] | undefined
+type ReservedFn = (col0: number, row: number) => boolean
+
 function cell(
   col1: number,
   row: number,
@@ -147,36 +151,30 @@ export function isLegalTimeJumper(
 
 export const SWITCHABLE_LEFT_COLS = SWITCHABLE_BLOCKS.map((b) => b.cols[0])
 
+function isBlankPanelSilk(e: PatchCell | undefined): boolean {
+  return !!e && !e.ref && e.color === 'white' && !e.label && !e.mark
+}
+
+function reservePotSections(reserve: (col1: number, row: number) => void): void {
+  for (const section of POT_SECTIONS) {
+    for (const col1 of section.cols) {
+      reserve(col1, rowIndex('l'))
+      reserve(col1, rowIndex('m'))
+    }
+    for (const [i, potNumber] of section.pots.entries()) {
+      if ((UNGROUNDED_POT_NUMBERS as readonly number[]).includes(potNumber)) {
+        reserve(section.cols[i]!, rowIndex('n'))
+      }
+    }
+  }
+}
+
 /**
- * Assign each live element port to the museum-faithful 30×15 board.
- * UI columns are 0-based; physical columns are 1-based in jackMap.
+ * Peripheral silk cells (0-based col,row) reserved from opportunistic
+ * fallback placement so museum labels/colors survive: verfügbar, AS,
+ * Stützpunkte, and Masse grounds. Diode fields handled by isFreeDiodeCell.
  */
-export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
-  const grid = new Map<string, PatchCell>()
-  const place = (c: PatchCell) => {
-    const key = `${c.col},${c.row}`
-    const prev = grid.get(key)
-    // Prefer live refs over unused silk
-    if (prev?.ref && !c.ref) return
-    grid.set(key, c)
-  }
-  const forcePlace = (c: PatchCell) => {
-    grid.set(`${c.col},${c.row}`, c)
-  }
-
-  const pots = nodes.filter((n) => n.kind === 'potentiometer').slice(0, POT_SLOTS)
-  const fgs = nodes.filter((n) => n.kind === 'functionGenerator').slice(0, 2)
-  const mults = nodes.filter((n) => n.kind === 'multiplier').slice(0, 4)
-  const road = nodes.find((n) => n.kind === 'signal')
-  const refP = nodes.find((n) => n.kind === 'reference' && n.voltage === 10)
-  const refM = nodes.find((n) => n.kind === 'reference' && n.voltage === -10)
-  const refG = nodes.find((n) => n.kind === 'reference' && n.voltage === 0)
-
-  /**
-   * Peripheral silk cells (0-based col,row) reserved from opportunistic
-   * fallback placement so museum labels/colors survive: verfügbar, AS,
-   * Stützpunkte, and Masse grounds. Diode fields handled by isFreeDiodeCell.
-   */
+function buildReservedSilk(): Set<string> {
   const reservedSilk = new Set<string>()
   const reserve = (col1: number, row: number) =>
     reservedSilk.add(`${col1 - 1},${row}`)
@@ -208,27 +206,19 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
   // Potentiometer sections: keep the high/wiper rows (and live lows) out of
   // opportunistic fallback so the museum green/orange silk survives instead of
   // being stolen by overflow amp ports or the final ensurePort pass.
-  for (const section of POT_SECTIONS) {
-    for (const col1 of section.cols) {
-      reserve(col1, rowIndex('l'))
-      reserve(col1, rowIndex('m'))
-    }
-    for (const [i, potNumber] of section.pots.entries()) {
-      if ((UNGROUNDED_POT_NUMBERS as readonly number[]).includes(potNumber)) {
-        reserve(section.cols[i]!, rowIndex('n'))
-      }
-    }
-  }
-  const isReservedSilk = (col0: number, row: number) =>
-    reservedSilk.has(`${col0},${row}`)
+  reservePotSections(reserve)
+  return reservedSilk
+}
 
-  // Fill unused silk first
+function fillBlankSilk(place: PlaceFn): void {
   for (let col1 = 1; col1 <= PATCH_COLS; col1++) {
     for (let row = 0; row < PATCH_ROWS; row++) {
       place(cell(col1, row, 'white', ''))
     }
   }
+}
 
+function placeConfigSilk(place: PlaceFn): void {
   // Config silk a–d on switchable pairs.
   // Σ / ∫ are drawn once centered over the 4-jack mode blocks (not per jack).
   for (const block of SWITCHABLE_BLOCKS) {
@@ -242,243 +232,429 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
     place(cell(leftCol, 3, 'white', `1 ${block.amp}`, undefined, undefined, { mark: '1' }))
     place(cell(rightCol, 3, 'white', `10 ${block.amp}`, undefined, undefined, { mark: '10' }))
   }
+}
 
-  /**
-   * Amplifiers — museum + manual §3.7.1:
-   * Left column = dark green gain inputs (independent; not left↔right commoned).
-   * Right column = paralleled amp outputs (white e–f / orange g–k on photo;
-   * red on tray row m). Switchable: e–k inputs. Summer-only: g–k inputs.
-   */
-  const outMultColorForRow = (row: number): JackColor =>
-    row === 4 || row === 5 ? 'white' : 'orange'
+function outMultColorForRow(row: number): JackColor {
+  return row === 4 || row === 5 ? 'white' : 'orange'
+}
 
-  // Full-width amp-band silk on every strip (live ports overwrite):
+function placeAmpStripSilk(
+  place: PlaceFn,
+  strip: (typeof AMP_STRIPS)[number],
+): void {
+  const [leftCol, rightCol] = strip.cols
+  const tag = String(strip.amp).padStart(2, '0')
+  const leftMarks: Record<number, string> = {
+    4: '1',
+    5: '1',
+    6: '1',
+    7: '10',
+    8: '10',
+    9: 'S',
+  }
+  for (const row of [4, 5]) {
+    place(
+      cell(leftCol, row, 'green', `${tag} silk ×1`, undefined, undefined, {
+        mark: leftMarks[row],
+        ampNumber: strip.amp,
+      }),
+    )
+    place(
+      cell(rightCol, row, 'white', `${tag} silk out`, undefined, undefined, {
+        ampNumber: strip.amp,
+      }),
+    )
+  }
+  for (const row of [6, 7, 8, 9]) {
+    place(
+      cell(leftCol, row, 'green', `${tag} silk`, undefined, undefined, {
+        mark: leftMarks[row],
+        ampNumber: strip.amp,
+      }),
+    )
+    place(
+      cell(rightCol, row, 'orange', `${tag} silk out`, undefined, undefined, {
+        ampNumber: strip.amp,
+      }),
+    )
+  }
+}
+
+/** Full-width amp-band silk on every strip (live ports overwrite). */
+function placeAmpBandSilk(place: PlaceFn): void {
   // e–f green|white, g–k green|orange
   for (const strip of AMP_STRIPS) {
-    const [leftCol, rightCol] = strip.cols
-    const tag = String(strip.amp).padStart(2, '0')
-    const leftMarks: Record<number, string> = {
-      4: '1',
-      5: '1',
-      6: '1',
-      7: '10',
-      8: '10',
-      9: 'S',
-    }
-    for (const row of [4, 5]) {
-      place(
-        cell(leftCol, row, 'green', `${tag} silk ×1`, undefined, undefined, {
-          mark: leftMarks[row],
-          ampNumber: strip.amp,
-        }),
-      )
-      place(
-        cell(rightCol, row, 'white', `${tag} silk out`, undefined, undefined, {
-          ampNumber: strip.amp,
-        }),
-      )
-    }
-    for (const row of [6, 7, 8, 9]) {
-      place(
-        cell(leftCol, row, 'green', `${tag} silk`, undefined, undefined, {
-          mark: leftMarks[row],
-          ampNumber: strip.amp,
-        }),
-      )
-      place(
-        cell(rightCol, row, 'orange', `${tag} silk out`, undefined, undefined, {
-          ampNumber: strip.amp,
-        }),
-      )
+    placeAmpStripSilk(place, strip)
+  }
+}
+
+function placeAmpOutputMults(
+  place: PlaceFn,
+  rightCol: number,
+  tag: string,
+  outRef: PortRef,
+  ampNumber: number,
+): void {
+  // Right column of the input band = paralleled amp-output mults.
+  // Amp number is silk between k/l (not on the jacks).
+  const inputRows = ampInputPlan(ampNumber).map((s) => s.row)
+  for (const row of inputRows) {
+    place(
+      cell(
+        rightCol,
+        row,
+        outMultColorForRow(row),
+        `${tag} Out`,
+        outRef,
+        'out',
+        { ampNumber },
+      ),
+    )
+  }
+}
+
+function placeInverterInput(
+  place: PlaceFn,
+  amp: CircuitNode,
+  leftCol: number,
+  tag: string,
+  ampNumber: number,
+): void {
+  const plan0 = ampInputPlan(ampNumber)[0]!
+  place(
+    cell(
+      leftCol,
+      plan0.row,
+      'green',
+      `${tag} ${amp.label} In`,
+      { nodeId: amp.id, port: 'in' },
+      'in',
+      { ampNumber, mark: '1' },
+    ),
+  )
+}
+
+function placeSummerIntegratorInputs(
+  place: PlaceFn,
+  amp: CircuitNode,
+  leftCol: number,
+  tag: string,
+  ampNumber: number,
+  ports: PortDef[],
+): void {
+  for (const step of ampInputPlan(ampNumber)) {
+    const p = ports.find((x) => x.name === step.port)
+    if (!p) continue
+    place(
+      cell(
+        leftCol,
+        step.row,
+        'green',
+        `${tag} ${amp.label} ×${step.gainLabel}`,
+        { nodeId: amp.id, port: step.port },
+        'in',
+        { ampNumber, mark: step.gainLabel },
+      ),
+    )
+  }
+}
+
+function placeAmpInputs(
+  place: PlaceFn,
+  amp: CircuitNode,
+  leftCol: number,
+  tag: string,
+  ampNumber: number,
+  ports: PortDef[],
+): void {
+  if (amp.kind === 'inverter') {
+    placeInverterInput(place, amp, leftCol, tag, ampNumber)
+    return
+  }
+  placeSummerIntegratorInputs(place, amp, leftCol, tag, ampNumber, ports)
+}
+
+function placeIntegratorTray(
+  place: PlaceFn,
+  amp: CircuitNode,
+  leftCol: number,
+  rightCol: number,
+  tag: string,
+  ampNumber: number,
+): void {
+  const icRef = { nodeId: amp.id, port: 'ic' }
+  const aRow = rowIndex('l')
+  if (!isFreeDiodeCell(leftCol, aRow)) {
+    place(
+      cell(leftCol, aRow, 'white', `${tag} A`, icRef, 'in', {
+        ampNumber,
+        mark: 'A',
+      }),
+    )
+  }
+  if (!isFreeDiodeCell(rightCol, aRow)) {
+    place(
+      cell(rightCol, aRow, 'white', `${tag} A`, icRef, 'in', {
+        ampNumber,
+        mark: 'A',
+      }),
+    )
+  }
+}
+
+function placeSummerTray(
+  place: PlaceFn,
+  amp: CircuitNode,
+  leftCol: number,
+  rightCol: number,
+  trayAuxRow: number,
+  tag: string,
+  ampNumber: number,
+  ports: PortDef[],
+): void {
+  const r = ports.find((x) => x.name === 'r')
+  if (r && !isFreeDiodeCell(leftCol, trayAuxRow)) {
+    place(
+      cell(
+        leftCol,
+        trayAuxRow,
+        'white',
+        `${tag} R`,
+        { nodeId: amp.id, port: 'r' },
+        'in',
+        { ampNumber, mark: 'R' },
+      ),
+    )
+  }
+  const g = ports.find((x) => x.name === 'g')
+  if (g && !isFreeDiodeCell(rightCol, trayAuxRow)) {
+    place(
+      cell(
+        rightCol,
+        trayAuxRow,
+        'white',
+        `${tag} G`,
+        { nodeId: amp.id, port: 'g' },
+        'in',
+        { ampNumber, mark: 'G' },
+      ),
+    )
+  }
+}
+
+function placeAmpTrayAux(
+  place: PlaceFn,
+  amp: CircuitNode,
+  leftCol: number,
+  rightCol: number,
+  trayAuxRow: number,
+  traySplit: boolean,
+  tag: string,
+  ampNumber: number,
+  ports: PortDef[],
+): void {
+  // Tray IC/R/G/Out — prefer rows l/m; skip freie Dioden fields.
+  if (amp.kind === 'integrator') {
+    placeIntegratorTray(place, amp, leftCol, rightCol, tag, ampNumber)
+    return
+  }
+  if (amp.kind === 'summer' && !traySplit) {
+    placeSummerTray(
+      place,
+      amp,
+      leftCol,
+      rightCol,
+      trayAuxRow,
+      tag,
+      ampNumber,
+      ports,
+    )
+  }
+}
+
+function placeAmpTrayOuts(
+  place: PlaceFn,
+  leftCol: number,
+  rightCol: number,
+  trayOutRow: number,
+  traySplit: boolean,
+  tag: string,
+  outRef: PortRef,
+  ampNumber: number,
+): void {
+  // Tray row m: paralleled red outs when the cell is not a pot wiper column.
+  // Pot sections share cols with amp strips; wipers keep row m there.
+  // Amp-output mults remain on the right-column e–k / g–k band.
+  if (traySplit) return
+  for (const col1 of [leftCol, rightCol]) {
+    if (isFreeDiodeCell(col1, trayOutRow)) continue
+    if ((POT_COLS as readonly number[]).includes(col1)) continue
+    place(
+      cell(col1, trayOutRow, 'red', `${tag} Out`, outRef, 'out', {
+        ampNumber,
+      }),
+    )
+  }
+}
+
+/**
+ * Amplifiers — museum + manual §3.7.1:
+ * Left column = dark green gain inputs (independent; not left↔right commoned).
+ * Right column = paralleled amp outputs (white e–f / orange g–k on photo;
+ * red on tray row m). Switchable: e–k inputs. Summer-only: g–k inputs.
+ */
+function placeSlottedAmp(
+  place: PlaceFn,
+  amp: CircuitNode,
+  ampNumber: number,
+  leftCol: number,
+  rightCol: number,
+): void {
+  const tag = String(ampNumber).padStart(2, '0')
+  const ports = portsFor(amp.kind, amp)
+  const { aux: trayAuxRow, out: trayOutRow, split: traySplit } =
+    ampTrayRows(leftCol, rightCol)
+  const outRef = { nodeId: amp.id, port: 'out' }
+
+  placeAmpOutputMults(place, rightCol, tag, outRef, ampNumber)
+  placeAmpInputs(place, amp, leftCol, tag, ampNumber, ports)
+  placeAmpTrayAux(
+    place,
+    amp,
+    leftCol,
+    rightCol,
+    trayAuxRow,
+    traySplit,
+    tag,
+    ampNumber,
+    ports,
+  )
+  placeAmpTrayOuts(
+    place,
+    leftCol,
+    rightCol,
+    trayOutRow,
+    traySplit,
+    tag,
+    outRef,
+    ampNumber,
+  )
+}
+
+function freeOverflowKeys(
+  grid: Map<string, PatchCell>,
+  isReservedSilk: ReservedFn,
+): [number, number][] {
+  const out: [number, number][] = []
+  for (let r = PATCH_ROWS - 1; r >= 0; r--) {
+    for (let c = 0; c < PATCH_COLS; c++) {
+      if (isFreeDiodeCell(c + 1, r) || isReservedSilk(c, r)) continue
+      // Only blank panel silk — never steal museum-colored or labeled cells.
+      if (isBlankPanelSilk(grid.get(`${c},${r}`))) {
+        out.push([c, r])
+      }
     }
   }
+  return out
+}
 
+function claimOverflowPort(
+  place: PlaceFn,
+  grid: Map<string, PatchCell>,
+  isReservedSilk: ReservedFn,
+  amp: CircuitNode,
+  ampNumber: number,
+  ports: PortDef[],
+  tag: string,
+  portName: string,
+  dir: PortDirection,
+  color: JackColor,
+): void {
+  const p = ports.find((x) => x.name === portName)
+  if (!p) return
+  const spot = freeOverflowKeys(grid, isReservedSilk)[0]
+  if (!spot) return
+  const [c, r] = spot
+  place(
+    cell(
+      c + 1,
+      r,
+      color,
+      `${tag} ${amp.label} ${p.label ?? portName}`,
+      { nodeId: amp.id, port: portName },
+      dir,
+      { ampNumber },
+    ),
+  )
+}
+
+function placeOverflowAmp(
+  place: PlaceFn,
+  grid: Map<string, PatchCell>,
+  isReservedSilk: ReservedFn,
+  amp: CircuitNode,
+  ampNumber: number,
+): void {
+  // Overflow multi-chassis amps → free cells scanned bottom-up
+  // (rows a–d stay reserved for white config silk)
+  const tag = String(ampNumber).padStart(2, '0')
+  const ports = portsFor(amp.kind, amp)
+  const claim = (
+    portName: string,
+    dir: PortDirection,
+    color: JackColor,
+  ) =>
+    claimOverflowPort(
+      place,
+      grid,
+      isReservedSilk,
+      amp,
+      ampNumber,
+      ports,
+      tag,
+      portName,
+      dir,
+      color,
+    )
+
+  if (amp.kind === 'inverter') {
+    claim('in', 'in', 'green')
+    claim('out', 'out', 'red')
+    return
+  }
+  if (amp.kind === 'integrator') {
+    claim('in0', 'in', 'green')
+    claim('in1', 'in', 'green')
+    claim('ic', 'in', 'white')
+    claim('out', 'out', 'red')
+    return
+  }
+  claim('in0', 'in', 'green')
+  claim('in1', 'in', 'green')
+  claim('in2', 'in', 'green')
+  claim('out', 'out', 'red')
+}
+
+function placeLiveAmps(
+  nodes: CircuitNode[],
+  place: PlaceFn,
+  isReservedSilk: ReservedFn,
+  grid: Map<string, PatchCell>,
+): void {
   const allAmps = nodes.filter(isComputingAmp)
   allAmps.forEach((amp, idx) => {
     const ampNumber = idx + 1
-    const tag = String(ampNumber).padStart(2, '0')
-    const ports = portsFor(amp.kind, amp)
     const strip = ampStrip(ampNumber)
-
     if (idx < AMP_SLOTS && strip) {
       const [leftCol, rightCol] = strip.cols
-
-      const { aux: trayAuxRow, out: trayOutRow, split: traySplit } =
-        ampTrayRows(leftCol, rightCol)
-
-      const outRef = { nodeId: amp.id, port: 'out' }
-      const inputRows = ampInputPlan(ampNumber).map((s) => s.row)
-      // Right column of the input band = paralleled amp-output mults.
-      // Amp number is silk between k/l (not on the jacks).
-      for (const row of inputRows) {
-        place(
-          cell(
-            rightCol,
-            row,
-            outMultColorForRow(row),
-            `${tag} Out`,
-            outRef,
-            'out',
-            { ampNumber },
-          ),
-        )
-      }
-
-      if (amp.kind === 'inverter') {
-        const plan0 = ampInputPlan(ampNumber)[0]!
-        place(
-          cell(
-            leftCol,
-            plan0.row,
-            'green',
-            `${tag} ${amp.label} In`,
-            { nodeId: amp.id, port: 'in' },
-            'in',
-            { ampNumber, mark: '1' },
-          ),
-        )
-      } else {
-        for (const step of ampInputPlan(ampNumber)) {
-          const p = ports.find((x) => x.name === step.port)
-          if (!p) continue
-          place(
-            cell(
-              leftCol,
-              step.row,
-              'green',
-              `${tag} ${amp.label} ×${step.gainLabel}`,
-              { nodeId: amp.id, port: step.port },
-              'in',
-              { ampNumber, mark: step.gainLabel },
-            ),
-          )
-        }
-      }
-
-      // Tray IC/R/G/Out — prefer rows l/m; skip freie Dioden fields.
-      if (amp.kind === 'integrator') {
-        const icRef = { nodeId: amp.id, port: 'ic' }
-        const aRow = rowIndex('l')
-        if (!isFreeDiodeCell(leftCol, aRow)) {
-          place(
-            cell(leftCol, aRow, 'white', `${tag} A`, icRef, 'in', {
-              ampNumber,
-              mark: 'A',
-            }),
-          )
-        }
-        if (!isFreeDiodeCell(rightCol, aRow)) {
-          place(
-            cell(rightCol, aRow, 'white', `${tag} A`, icRef, 'in', {
-              ampNumber,
-              mark: 'A',
-            }),
-          )
-        }
-      } else if (amp.kind === 'summer' && !traySplit) {
-        const r = ports.find((x) => x.name === 'r')
-        if (r && !isFreeDiodeCell(leftCol, trayAuxRow)) {
-          place(
-            cell(
-              leftCol,
-              trayAuxRow,
-              'white',
-              `${tag} R`,
-              { nodeId: amp.id, port: 'r' },
-              'in',
-              { ampNumber, mark: 'R' },
-            ),
-          )
-        }
-        const g = ports.find((x) => x.name === 'g')
-        if (g && !isFreeDiodeCell(rightCol, trayAuxRow)) {
-          place(
-            cell(
-              rightCol,
-              trayAuxRow,
-              'white',
-              `${tag} G`,
-              { nodeId: amp.id, port: 'g' },
-              'in',
-              { ampNumber, mark: 'G' },
-            ),
-          )
-        }
-      }
-
-      // Tray row m: paralleled red outs when the cell is not a pot wiper column.
-      // Pot sections share cols with amp strips; wipers keep row m there.
-      // Amp-output mults remain on the right-column e–k / g–k band.
-      if (!traySplit) {
-        for (const col1 of [leftCol, rightCol]) {
-          if (isFreeDiodeCell(col1, trayOutRow)) continue
-          if ((POT_COLS as readonly number[]).includes(col1)) continue
-          place(
-            cell(col1, trayOutRow, 'red', `${tag} Out`, outRef, 'out', {
-              ampNumber,
-            }),
-          )
-        }
-      }
+      placeSlottedAmp(place, amp, ampNumber, leftCol, rightCol)
       return
     }
-
-    // Overflow multi-chassis amps → free cells scanned bottom-up
-    // (rows a–d stay reserved for white config silk)
-    const freeKeys = (): [number, number][] => {
-      const out: [number, number][] = []
-      for (let r = PATCH_ROWS - 1; r >= 0; r--) {
-        for (let c = 0; c < PATCH_COLS; c++) {
-          if (isFreeDiodeCell(c + 1, r) || isReservedSilk(c, r)) continue
-          const e = grid.get(`${c},${r}`)
-          // Only blank panel silk — never steal museum-colored or labeled cells.
-          if (e && !e.ref && e.color === 'white' && !e.label && !e.mark) {
-            out.push([c, r])
-          }
-        }
-      }
-      return out
-    }
-
-    const claim = (
-      portName: string,
-      dir: PortDirection,
-      color: JackColor,
-    ) => {
-      const p = ports.find((x) => x.name === portName)
-      if (!p) return
-      const spot = freeKeys()[0]
-      if (!spot) return
-      const [c, r] = spot
-      place(
-        cell(
-          c + 1,
-          r,
-          color,
-          `${tag} ${amp.label} ${p.label ?? portName}`,
-          { nodeId: amp.id, port: portName },
-          dir,
-          { ampNumber },
-        ),
-      )
-    }
-
-    if (amp.kind === 'inverter') {
-      claim('in', 'in', 'green')
-      claim('out', 'out', 'red')
-    } else if (amp.kind === 'integrator') {
-      claim('in0', 'in', 'green')
-      claim('in1', 'in', 'green')
-      claim('ic', 'in', 'white')
-      claim('out', 'out', 'red')
-    } else {
-      claim('in0', 'in', 'green')
-      claim('in1', 'in', 'green')
-      claim('in2', 'in', 'green')
-      claim('out', 'out', 'red')
-    }
+    placeOverflowAmp(place, grid, isReservedSilk, amp, ampNumber)
   })
+}
 
+function placeFunctionGenerators(fgs: CircuitNode[], place: PlaceFn): void {
   // Function generators cols 5 / 23 — F1/F2 silk is a single centered label
   // under the top jack (drawn in the overlay), not per-hole marks.
   fgs.forEach((fg, i) => {
@@ -500,7 +676,9 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
       )
     }
   })
+}
 
+function placeMultiplierSilk(place: PlaceFn): void {
   // Multiplikator silk (always) — museum photo / §3.7.1:
   // two parallel green jacks for each of +X, +Y, −X, −Y; the right column
   // has three red network outputs and the white G jack at the bottom.
@@ -520,8 +698,9 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
       cell(c2, 3, 'white', `${tag} G`, undefined, undefined, { mark: 'G' }),
     )
   }
+}
 
-  // Multipliers — live ports on the silk map
+function placeMultiplierLive(mults: CircuitNode[], place: PlaceFn): void {
   mults.forEach((m, i) => {
     const bank = MULTIPLIER_BANKS[i]
     if (!bank) return
@@ -554,31 +733,41 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
       )
     }
   })
+}
 
-  /**
-   * Find a free cell, checking preferred spots first, then scanning the
-   * board bottom-up so fallbacks never invade the white a–d config band.
-   */
-  const firstFree = (
-    preferred: [number, number][] = [],
-  ): [number, number] | undefined => {
-    const usable = ([c, r]: [number, number]) =>
-      !isFreeDiodeCell(c + 1, r) && !isReservedSilk(c, r)
-    const isBlankSilk = (e: PatchCell | undefined) =>
-      !!e && !e.ref && e.color === 'white' && !e.label && !e.mark
-    for (const spot of preferred) {
-      if (!usable(spot)) continue
-      if (isBlankSilk(grid.get(`${spot[0]},${spot[1]}`))) return spot
-    }
-    for (let r = PATCH_ROWS - 1; r >= 0; r--) {
-      for (let c = 0; c < PATCH_COLS; c++) {
-        if (!usable([c, r])) continue
-        if (isBlankSilk(grid.get(`${c},${r}`))) return [c, r]
-      }
-    }
-    return undefined
+function placeMultiplierSilkAndLive(
+  mults: CircuitNode[],
+  place: PlaceFn,
+): void {
+  placeMultiplierSilk(place)
+  placeMultiplierLive(mults, place)
+}
+
+/**
+ * Find a free cell, checking preferred spots first, then scanning the
+ * board bottom-up so fallbacks never invade the white a–d config band.
+ */
+function firstFree(
+  grid: Map<string, PatchCell>,
+  isReservedSilk: ReservedFn,
+  preferred: [number, number][] = [],
+): [number, number] | undefined {
+  const usable = ([c, r]: [number, number]) =>
+    !isFreeDiodeCell(c + 1, r) && !isReservedSilk(c, r)
+  for (const spot of preferred) {
+    if (!usable(spot)) continue
+    if (isBlankPanelSilk(grid.get(`${spot[0]},${spot[1]}`))) return spot
   }
+  for (let r = PATCH_ROWS - 1; r >= 0; r--) {
+    for (let c = 0; c < PATCH_COLS; c++) {
+      if (!usable([c, r])) continue
+      if (isBlankPanelSilk(grid.get(`${c},${r}`))) return [c, r]
+    }
+  }
+  return undefined
+}
 
+function placePotentiometerSilk(forcePlace: PlaceFn): void {
   // Potentiometer silk: four 5-pot sections on rows l/m, with only the
   // manual-isolated lows (5, 10, 11, 16) present on row n.
   const potHighRow = rowIndex('l')
@@ -607,8 +796,17 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
       )
     }
   })
+}
 
+function placePotentiometerLive(
+  pots: CircuitNode[],
+  forcePlace: PlaceFn,
+): void {
   // Pots — live high/wiper use rows l/m; isolated lows use row n.
+  const potHighRow = rowIndex('l')
+  const potWiperRow = rowIndex('m')
+  const potLowRow = rowIndex('n')
+  const ungroundedPots = new Set<number>(UNGROUNDED_POT_NUMBERS)
   pots.forEach((pot, slot) => {
     const potNumber = slot + 1
     const col1 = POT_COLS[slot] ?? ((slot % PATCH_COLS) + 1)
@@ -638,46 +836,62 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
       claim('low', 'green', potLowRow)
     }
   })
+}
 
+function placePotentiometers(
+  pots: CircuitNode[],
+  forcePlace: PlaceFn,
+): void {
+  placePotentiometerSilk(forcePlace)
+  placePotentiometerLive(pots, forcePlace)
+}
+
+function placeMeCol(
+  forcePlace: PlaceFn,
+  col1: number,
+  nRow: number,
+  oRow: number,
+  refP: CircuitNode | undefined,
+  refM: CircuitNode | undefined,
+): void {
+  if (refP) {
+    forcePlace(
+      cell(col1, nRow, 'red', '+ME', { nodeId: refP.id, port: 'out' }, 'out', {
+        mark: '+E',
+      }),
+    )
+  } else {
+    forcePlace(cell(col1, nRow, 'red', '+ME', undefined, undefined, { mark: '+E' }))
+  }
+  if (refM) {
+    forcePlace(
+      cell(col1, oRow, 'blue', '−ME', { nodeId: refM.id, port: 'out' }, 'out', {
+        mark: '−E',
+      }),
+    )
+  } else {
+    forcePlace(cell(col1, oRow, 'blue', '−ME', undefined, undefined, { mark: '−E' }))
+  }
+}
+
+function placeMeFields(
+  forcePlace: PlaceFn,
+  refP: CircuitNode | undefined,
+  refM: CircuitNode | undefined,
+): void {
   // +ME / −ME reference-metering block (rows n/o):
   // +ME row n = red (+10 V), −ME row o = blue (−10 V)
   const nRow = rowIndex('n')
   const oRow = rowIndex('o')
   for (const col1 of ME_COLS) {
-    if (refP) {
-      forcePlace(
-        cell(col1, nRow, 'red', '+ME', { nodeId: refP.id, port: 'out' }, 'out', {
-          mark: '+E',
-        }),
-      )
-    } else {
-      forcePlace(cell(col1, nRow, 'red', '+ME', undefined, undefined, { mark: '+E' }))
-    }
-    if (refM) {
-      forcePlace(
-        cell(col1, oRow, 'blue', '−ME', { nodeId: refM.id, port: 'out' }, 'out', {
-          mark: '−E',
-        }),
-      )
-    } else {
-      forcePlace(cell(col1, oRow, 'blue', '−ME', undefined, undefined, { mark: '−E' }))
-    }
+    placeMeCol(forcePlace, col1, nRow, oRow, refP, refM)
   }
-  // Ensure at least one of each ref exists (bottom-up, keep a–d white)
-  const ensureRef = (
-    node: CircuitNode | undefined,
-    color: JackColor,
-    label: string,
-  ) => {
-    if (!node) return
-    if ([...grid.values()].some((c) => c.ref?.nodeId === node.id)) return
-    const spot = firstFree()
-    if (!spot) return
-    const [c, r] = spot
-    place(
-      cell(c + 1, r, color, label, { nodeId: node.id, port: 'out' }, 'out'),
-    )
-  }
+}
+
+function placeMasseP(
+  forcePlace: PlaceFn,
+  refG: CircuitNode | undefined,
+): void {
   // Masse — chassis ground row p, cols 12–19 (silk §3.5).
   for (const col1 of MASSE_P_COLS) {
     forcePlace(
@@ -691,7 +905,9 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
       ),
     )
   }
+}
 
+function placeStuetzpunkte(forcePlace: PlaceFn): void {
   // Potentialfreie Stützpunkte — isolated tie-points cols 6 and 25, rows l–o.
   // Force these after amp tray placement so amp 3 stays on col 5 and amp 13
   // stays on col 26; neither may overwrite the white tie-point columns.
@@ -700,7 +916,12 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
       forcePlace(cell(col1, rowIndex(letter), 'white', 'Stützpunkt'))
     }
   }
+}
 
+function placeMasseO(
+  forcePlace: PlaceFn,
+  refG: CircuitNode | undefined,
+): void {
   // Masse — system common ground o5 & o26, plus section stubs o13 & o18.
   const oRowMasse = rowIndex('o')
   for (const col1 of [5, 26, ...MASSE_O_STUB_COLS]) {
@@ -715,7 +936,13 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
       ),
     )
   }
+}
 
+function placeVerfuegbar(
+  place: PlaceFn,
+  forcePlace: PlaceFn,
+  road: CircuitNode | undefined,
+): void {
   // verfügbar — spare jack field row p cols 1–6 (pink). Road/signal out on p1 only.
   const pRow = rowIndex('p')
   for (const col1 of [1, 2, 3, 4, 5, 6]) {
@@ -743,21 +970,41 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
   // Col 30 rows n–o — pink utility.
   forcePlace(cell(30, rowIndex('n'), 'pink', 'verfügbar'))
   forcePlace(cell(30, rowIndex('o'), 'pink', 'verfügbar'))
+}
 
+function placeAsJacks(
+  place: PlaceFn,
+  grid: Map<string, PatchCell>,
+): void {
   // Abschaltleitung (AS) — overload → Halt short jacks 1n / 1o (pink).
   for (const letter of ['n', 'o'] as const) {
     const row = rowIndex(letter)
     const key = `0,${row}`
-    if (!grid.get(key)?.ref) place(cell(1, row, 'pink', 'AS', undefined, undefined, { mark: 'AS' }))
+    if (!grid.get(key)?.ref) {
+      place(cell(1, row, 'pink', 'AS', undefined, undefined, { mark: 'AS' }))
+    }
   }
+}
 
-  // Now that Masse grounds carry refG, only fill missing refs elsewhere.
-  ensureRef(refP, 'red', '+10 V')
-  ensureRef(refM, 'blue', '−10 V')
-  ensureRef(refG, 'black', 'Ground')
+function ensureRef(
+  place: PlaceFn,
+  grid: Map<string, PatchCell>,
+  findFree: FreeSpotFn,
+  node: CircuitNode | undefined,
+  color: JackColor,
+  label: string,
+): void {
+  if (!node) return
+  if ([...grid.values()].some((c) => c.ref?.nodeId === node.id)) return
+  const spot = findFree()
+  if (!spot) return
+  const [c, r] = spot
+  place(
+    cell(c + 1, r, color, label, { nodeId: node.id, port: 'out' }, 'out'),
+  )
+}
 
-  // Signal generator ports are ensured in the final pass below
-
+function placeFreeDiodes(forcePlace: PlaceFn): void {
   // Freie Dioden — yellow fields l7–o8, l14–o17, l23–o24 (always; no circuit refs).
   for (const block of FREE_DIODE_BLOCKS) {
     for (const col1 of block.cols) {
@@ -767,69 +1014,157 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
       }
     }
   }
+}
 
+function placeComparators(forcePlace: PlaceFn): void {
   // Komparator-Relais — light brown fields on row p (K1 cols 7–11, K2 cols 20–24)
   for (const block of COMPARATOR_BLOCKS) {
     const row = rowIndex(block.row)
     for (const col1 of block.cols) {
-      forcePlace(cell(col1, row, 'brown', block.id, undefined, undefined, { mark: block.id }))
+      forcePlace(
+        cell(col1, row, 'brown', block.id, undefined, undefined, {
+          mark: block.id,
+        }),
+      )
     }
   }
+}
 
-  // Final pass: ensure every port on every non-reference node has a jack
-  const ensurePort = (
-    node: CircuitNode,
-    portName: string,
-    dir: PortDirection,
-    color: JackColor,
-  ) => {
-    const exists = [...grid.values()].some(
-      (c) => c.ref?.nodeId === node.id && c.ref.port === portName,
-    )
-    if (exists) return
-    const spot = firstFree()
-    if (!spot) return
-    const [c, r] = spot
-    place(
-      cell(
-        c + 1,
-        r,
-        color,
-        `${node.label} ${portName}`,
-        { nodeId: node.id, port: portName },
-        dir,
-      ),
-    )
+function placePeripheralFields(
+  place: PlaceFn,
+  forcePlace: PlaceFn,
+  grid: Map<string, PatchCell>,
+  findFree: FreeSpotFn,
+  road: CircuitNode | undefined,
+  refP: CircuitNode | undefined,
+  refM: CircuitNode | undefined,
+  refG: CircuitNode | undefined,
+): void {
+  placeMeFields(forcePlace, refP, refM)
+  placeMasseP(forcePlace, refG)
+  placeStuetzpunkte(forcePlace)
+  placeMasseO(forcePlace, refG)
+  placeVerfuegbar(place, forcePlace, road)
+  placeAsJacks(place, grid)
+  // Now that Masse grounds carry refG, only fill missing refs elsewhere.
+  ensureRef(place, grid, findFree, refP, 'red', '+10 V')
+  ensureRef(place, grid, findFree, refM, 'blue', '−10 V')
+  ensureRef(place, grid, findFree, refG, 'black', 'Ground')
+  placeFreeDiodes(forcePlace)
+  placeComparators(forcePlace)
+}
+
+function essentialPortsFor(n: CircuitNode): string[] {
+  switch (n.kind) {
+    case 'inverter':
+    case 'potentiometer':
+      return ['in', 'out']
+    case 'integrator':
+      return ['in0', 'in1', 'ic', 'out']
+    case 'summer':
+      return ['in0', 'in1', 'in2', 'out']
+    case 'functionGenerator':
+    case 'multiplier':
+      return portsFor(n.kind, n).map((p) => p.name)
+    default:
+      return ['out']
   }
+}
 
+function ensurePort(
+  place: PlaceFn,
+  grid: Map<string, PatchCell>,
+  findFree: FreeSpotFn,
+  node: CircuitNode,
+  portName: string,
+  dir: PortDirection,
+  color: JackColor,
+): void {
+  const exists = [...grid.values()].some(
+    (c) => c.ref?.nodeId === node.id && c.ref.port === portName,
+  )
+  if (exists) return
+  const spot = findFree()
+  if (!spot) return
+  const [c, r] = spot
+  place(
+    cell(
+      c + 1,
+      r,
+      color,
+      `${node.label} ${portName}`,
+      { nodeId: node.id, port: portName },
+      dir,
+    ),
+  )
+}
+
+function ensureEssentialPorts(
+  nodes: CircuitNode[],
+  place: PlaceFn,
+  findFree: FreeSpotFn,
+  grid: Map<string, PatchCell>,
+): void {
+  // Final pass: ensure every port on every non-reference node has a jack
   for (const n of nodes) {
     if (n.kind === 'reference') continue
-    let essential: string[]
-    switch (n.kind) {
-      case 'inverter':
-      case 'potentiometer':
-        essential = ['in', 'out']
-        break
-      case 'integrator':
-        essential = ['in0', 'in1', 'ic', 'out']
-        break
-      case 'summer':
-        essential = ['in0', 'in1', 'in2', 'out']
-        break
-      case 'functionGenerator':
-      case 'multiplier':
-        essential = portsFor(n.kind, n).map((p) => p.name)
-        break
-      default:
-        essential = ['out']
-        break
-    }
-    for (const name of essential) {
+    for (const name of essentialPortsFor(n)) {
       const p = portsFor(n.kind, n).find((x) => x.name === name)
       if (!p) continue
-      ensurePort(n, p.name, p.direction, asColor(p.jack))
+      ensurePort(place, grid, findFree, n, p.name, p.direction, asColor(p.jack))
     }
   }
+}
+
+/**
+ * Assign each live element port to the museum-faithful 30×15 board.
+ * UI columns are 0-based; physical columns are 1-based in jackMap.
+ */
+export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
+  const grid = new Map<string, PatchCell>()
+  const place: PlaceFn = (c) => {
+    const key = `${c.col},${c.row}`
+    const prev = grid.get(key)
+    // Prefer live refs over unused silk
+    if (prev?.ref && !c.ref) return
+    grid.set(key, c)
+  }
+  const forcePlace: PlaceFn = (c) => {
+    grid.set(`${c.col},${c.row}`, c)
+  }
+
+  const pots = nodes.filter((n) => n.kind === 'potentiometer').slice(0, POT_SLOTS)
+  const fgs = nodes.filter((n) => n.kind === 'functionGenerator').slice(0, 2)
+  const mults = nodes.filter((n) => n.kind === 'multiplier').slice(0, 4)
+  const road = nodes.find((n) => n.kind === 'signal')
+  const refP = nodes.find((n) => n.kind === 'reference' && n.voltage === 10)
+  const refM = nodes.find((n) => n.kind === 'reference' && n.voltage === -10)
+  const refG = nodes.find((n) => n.kind === 'reference' && n.voltage === 0)
+
+  const reservedSilk = buildReservedSilk()
+  const isReservedSilk: ReservedFn = (col0, row) =>
+    reservedSilk.has(`${col0},${row}`)
+  const findFree: FreeSpotFn = (preferred = []) =>
+    firstFree(grid, isReservedSilk, preferred)
+
+  fillBlankSilk(place)
+  placeConfigSilk(place)
+  placeAmpBandSilk(place)
+  placeLiveAmps(nodes, place, isReservedSilk, grid)
+  placeFunctionGenerators(fgs, place)
+  placeMultiplierSilkAndLive(mults, place)
+  placePotentiometers(pots, forcePlace)
+  placePeripheralFields(
+    place,
+    forcePlace,
+    grid,
+    findFree,
+    road,
+    refP,
+    refM,
+    refG,
+  )
+  ensureEssentialPorts(nodes, place, findFree, grid)
 
   return [...grid.values()].sort(
     (a, b) => a.row * PATCH_COLS + a.col - (b.row * PATCH_COLS + b.col),

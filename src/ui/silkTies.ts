@@ -87,16 +87,20 @@ function mergeIntervals(intervals: [number, number][]): [number, number][] {
   return out
 }
 
-/**
- * Section outlines as unique shared edge lines (one stroke between neighbors).
- * Potentiometer sections with an ungrounded low are L-shaped so n5 / n13 /
- * n18 / n26 sit inside the pot outline (no bar between m and that low).
- */
-export function buildSilkSectionLines(): SilkSegment[] {
-  const boxes = buildSilkSections()
+type EdgeMaps = {
+  horiz: Map<string, [number, number][]>
+  vert: Map<string, [number, number][]>
+  push: (
+    map: Map<string, [number, number][]>,
+    fixed: number,
+    a: number,
+    b: number,
+  ) => void
+}
+
+function makeEdgeMaps(): EdgeMaps {
   const horiz = new Map<string, [number, number][]>()
   const vert = new Map<string, [number, number][]>()
-
   const key = (n: number) => n.toFixed(4)
   const push = (
     map: Map<string, [number, number][]>,
@@ -109,19 +113,22 @@ export function buildSilkSectionLines(): SilkSegment[] {
     list.push([a, b])
     map.set(k, list)
   }
+  return { horiz, vert, push }
+}
 
-  for (const box of boxes) {
-    const x0 = box.x
-    const x1 = box.x + box.w
-    const y0 = box.y
-    const y1 = box.y + box.h
-    push(horiz, y0, x0, x1)
-    push(horiz, y1, x0, x1)
-    push(vert, x0, y0, y1)
-    push(vert, x1, y0, y1)
-  }
+function pushBoxEdges(maps: EdgeMaps, box: SilkRect): void {
+  const x0 = box.x
+  const x1 = box.x + box.w
+  const y0 = box.y
+  const y1 = box.y + box.h
+  maps.push(maps.horiz, y0, x0, x1)
+  maps.push(maps.horiz, y1, x0, x1)
+  maps.push(maps.vert, x0, y0, y1)
+  maps.push(maps.vert, x1, y0, y1)
+}
 
-  // Pot L-outlines (not plain rectangles — omit the m/n bar over the low jack).
+/** Pot L-outlines — omit the m/n bar over an ungrounded low jack. */
+function pushPotLOutlines(maps: EdgeMaps): void {
   for (const section of POT_SECTIONS) {
     const cols = [...section.cols]
     const x0 = cols[0]! - 1
@@ -132,11 +139,11 @@ export function buildSilkSectionLines(): SilkSegment[] {
     const lowIdx = section.pots.findIndex((p) =>
       (UNGROUNDED_POT_NUMBERS as readonly number[]).includes(p),
     )
-    push(horiz, y0, x0, x1) // top
+    maps.push(maps.horiz, y0, x0, x1)
     if (lowIdx < 0) {
-      push(horiz, yM, x0, x1)
-      push(vert, x0, y0, yM)
-      push(vert, x1, y0, yM)
+      maps.push(maps.horiz, yM, x0, x1)
+      maps.push(maps.vert, x0, y0, yM)
+      maps.push(maps.vert, x1, y0, yM)
       continue
     }
     const lowCol = cols[lowIdx]!
@@ -144,62 +151,77 @@ export function buildSilkSectionLines(): SilkSegment[] {
     const xr = lowCol
     if (lowIdx === 0) {
       // Low on the left (pots 11, 16 → n18, n26).
-      push(vert, x0, y0, yN)
-      push(vert, x1, y0, yM)
-      push(horiz, yM, xr, x1)
-      push(vert, xr, yM, yN)
-      push(horiz, yN, x0, xr)
+      maps.push(maps.vert, x0, y0, yN)
+      maps.push(maps.vert, x1, y0, yM)
+      maps.push(maps.horiz, yM, xr, x1)
+      maps.push(maps.vert, xr, yM, yN)
+      maps.push(maps.horiz, yN, x0, xr)
     } else {
       // Low on the right (pots 5, 10 → n5, n13).
-      push(vert, x0, y0, yM)
-      push(vert, x1, y0, yN)
-      push(horiz, yM, x0, xl)
-      push(vert, xl, yM, yN)
-      push(horiz, yN, xl, x1)
+      maps.push(maps.vert, x0, y0, yM)
+      maps.push(maps.vert, x1, y0, yN)
+      maps.push(maps.horiz, yM, x0, xl)
+      maps.push(maps.vert, xl, yM, yN)
+      maps.push(maps.horiz, yN, xl, x1)
     }
   }
+}
 
-  // Masse: row-p bar cols 12–19 with upward stubs at o13 / o18 (no o↔p bar there).
-  {
-    const cols = [...MASSE_P_COLS]
-    const x0 = cols[0]! - 1
-    const x1 = cols[cols.length - 1]!
-    const yTop = rowIndex('o')
-    const yMid = rowIndex('p')
-    const yBot = rowIndex('p') + 1
-    const stubSpans = [...MASSE_O_STUB_COLS]
-      .map((c) => [c - 1, c] as const)
-      .sort((a, b) => a[0] - b[0])
+/** Masse: row-p bar cols 12–19 with upward stubs at o13 / o18. */
+function pushMasseOutline(maps: EdgeMaps): void {
+  const cols = [...MASSE_P_COLS]
+  const x0 = cols[0]! - 1
+  const x1 = cols[cols.length - 1]!
+  const yTop = rowIndex('o')
+  const yMid = rowIndex('p')
+  const yBot = rowIndex('p') + 1
+  const stubSpans = [...MASSE_O_STUB_COLS]
+    .map((c) => [c - 1, c] as const)
+    .sort((a, b) => a[0] - b[0])
 
-    push(horiz, yBot, x0, x1)
-    push(vert, x0, yMid, yBot)
-    push(vert, x1, yMid, yBot)
+  maps.push(maps.horiz, yBot, x0, x1)
+  maps.push(maps.vert, x0, yMid, yBot)
+  maps.push(maps.vert, x1, yMid, yBot)
 
-    let cursor = x0
-    for (const [xl, xr] of stubSpans) {
-      if (cursor < xl) push(horiz, yMid, cursor, xl)
-      push(horiz, yTop, xl, xr)
-      push(vert, xl, yTop, yMid)
-      push(vert, xr, yTop, yMid)
-      cursor = xr
-    }
-    if (cursor < x1) push(horiz, yMid, cursor, x1)
+  let cursor = x0
+  for (const [xl, xr] of stubSpans) {
+    if (cursor < xl) maps.push(maps.horiz, yMid, cursor, xl)
+    maps.push(maps.horiz, yTop, xl, xr)
+    maps.push(maps.vert, xl, yTop, yMid)
+    maps.push(maps.vert, xr, yTop, yMid)
+    cursor = xr
   }
+  if (cursor < x1) maps.push(maps.horiz, yMid, cursor, x1)
+}
 
+function flushEdgeMaps(maps: EdgeMaps): SilkSegment[] {
   const segs: SilkSegment[] = []
-  for (const [yKey, intervals] of horiz) {
+  for (const [yKey, intervals] of maps.horiz) {
     const y = Number(yKey)
     for (const [a, b] of mergeIntervals(intervals)) {
       segs.push({ x1: a, y1: y, x2: b, y2: y })
     }
   }
-  for (const [xKey, intervals] of vert) {
+  for (const [xKey, intervals] of maps.vert) {
     const x = Number(xKey)
     for (const [a, b] of mergeIntervals(intervals)) {
       segs.push({ x1: x, y1: a, x2: x, y2: b })
     }
   }
   return segs
+}
+
+/**
+ * Section outlines as unique shared edge lines (one stroke between neighbors).
+ * Potentiometer sections with an ungrounded low are L-shaped so n5 / n13 /
+ * n18 / n26 sit inside the pot outline (no bar between m and that low).
+ */
+export function buildSilkSectionLines(): SilkSegment[] {
+  const maps = makeEdgeMaps()
+  for (const box of buildSilkSections()) pushBoxEdges(maps, box)
+  pushPotLOutlines(maps)
+  pushMasseOutline(maps)
+  return flushEdgeMaps(maps)
 }
 
 /**
