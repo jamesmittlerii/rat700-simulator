@@ -9,8 +9,12 @@ import {
 import type { MachineState } from '../engine/circuit'
 import { hasXYScope, scopeChannelsFor, type ScopeChannel } from '../scope/channels'
 
+/** Fast = banded polylines (default). Glow = classic per-segment shadowBlur. */
+export type PhosphorQuality = 'fast' | 'glow'
+
 interface XYScopeProps {
   machine: MachineState
+  phosphorQuality?: PhosphorQuality
 }
 
 /**
@@ -120,6 +124,11 @@ function bufferStride(length: number): number {
   return 1
 }
 
+/** Classic glow path used a milder stride (still skips some dense points). */
+function glowBufferStride(length: number): number {
+  return length > 400 ? 2 : 1
+}
+
 type PhosphorView = {
   cx: number
   cy: number
@@ -128,6 +137,7 @@ type PhosphorView = {
   persistSec: number
 }
 
+/** Cheap trail: 6 age bands, one polyline stroke each, no shadowBlur. */
 function drawPhosphorBand(
   ctx: CanvasRenderingContext2D,
   buf: Pt[],
@@ -162,7 +172,7 @@ function drawPhosphorBand(
   ctx.stroke()
 }
 
-function drawPhosphorTraces(
+function drawPhosphorTracesFast(
   ctx: CanvasRenderingContext2D,
   buffers: Record<string, Pt[]>,
   channels: ScopeChannel[],
@@ -182,6 +192,54 @@ function drawPhosphorTraces(
   }
 }
 
+/**
+ * Original trail: per-segment stroke + shadowBlur with continuous age alpha.
+ * Heavier on long chaos trails — kept for A/B comparison via the sidebar toggle.
+ */
+function drawPhosphorTracesGlow(
+  ctx: CanvasRenderingContext2D,
+  buffers: Record<string, Pt[]>,
+  channels: ScopeChannel[],
+  view: PhosphorView,
+): void {
+  const { cx, cy, px, now, persistSec } = view
+  const lineW = ctx.lineWidth
+  for (const ch of channels) {
+    const buf = buffers[ch.id]
+    if (!buf || buf.length < 2) continue
+    const stride = glowBufferStride(buf.length)
+    for (let i = stride; i < buf.length; i += stride) {
+      const a = buf[i - stride]!
+      const b = buf[i]!
+      const age = now - b.t
+      const alpha = Math.max(0.06, 1 - age / persistSec)
+      ctx.strokeStyle = `rgba(57, 255, 122, ${alpha.toFixed(3)})`
+      ctx.shadowColor = `rgba(57, 255, 122, ${(alpha * 0.35).toFixed(3)})`
+      ctx.shadowBlur = 2.5
+      ctx.lineWidth = lineW
+      ctx.beginPath()
+      ctx.moveTo(cx + a.x * px, cy - a.y * px)
+      ctx.lineTo(cx + b.x * px, cy - b.y * px)
+      ctx.stroke()
+    }
+  }
+  ctx.shadowBlur = 0
+}
+
+function drawPhosphorTraces(
+  ctx: CanvasRenderingContext2D,
+  buffers: Record<string, Pt[]>,
+  channels: ScopeChannel[],
+  view: PhosphorView,
+  quality: PhosphorQuality,
+): void {
+  if (quality === 'glow') {
+    drawPhosphorTracesGlow(ctx, buffers, channels, view)
+  } else {
+    drawPhosphorTracesFast(ctx, buffers, channels, view)
+  }
+}
+
 function drawScopeHud(
   ctx: CanvasRenderingContext2D,
   opts: {
@@ -193,18 +251,29 @@ function drawScopeHud(
     time: number
     fpsValue: number
     lastFeed: number
+    quality: PhosphorQuality
   },
 ): void {
-  const { w, h, isVehicle, persistSec, channelLabel, time, fpsValue, lastFeed } =
-    opts
+  const {
+    w,
+    h,
+    isVehicle,
+    persistSec,
+    channelLabel,
+    time,
+    fpsValue,
+    lastFeed,
+    quality,
+  } = opts
   ctx.fillStyle = '#2a8f55'
   const fontPx = Math.max(10, Math.round(h / 28))
   ctx.font = `${fontPx}px IBM Plex Sans, monospace`
   const persistLabel =
     persistSec >= 10 ? persistSec.toFixed(0) : persistSec.toFixed(1)
+  const qualityLabel = quality === 'glow' ? 'glow' : 'fast'
   const header = isVehicle
-    ? `X/Y mux · draw ~16 Hz · persist ${persistLabel}s`
-    : `${channelLabel ?? 'X/Y orbit'} · persist ${persistLabel}s`
+    ? `X/Y mux · draw ~16 Hz · persist ${persistLabel}s · ${qualityLabel}`
+    : `${channelLabel ?? 'X/Y orbit'} · persist ${persistLabel}s · ${qualityLabel}`
   ctx.fillText(header, 8, Math.max(14, h * 0.08))
   const fpsFresh = performance.now() - lastFeed < 500
   const fpsLabel = fpsFresh ? `${Math.round(fpsValue)} fps` : '— fps'
@@ -215,7 +284,7 @@ function drawScopeHud(
 
 /** Shared phosphor X/Y oscilloscope for vehicle mux or single-trace orbits. */
 export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
-  { machine },
+  { machine, phosphorQuality = 'fast' },
   ref,
 ) {
   const buffers = useRef<Record<string, Pt[]>>({})
@@ -223,6 +292,9 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const lastMode = useRef(machine.mode)
   const lastTime = useRef(-1)
+  /** Live quality for the rAF feed path (avoids stale closures while operating). */
+  const qualityRef = useRef<PhosphorQuality>(phosphorQuality)
+  qualityRef.current = phosphorQuality
   /** Rolling 1 s window of feed() timestamps for the on-scope FPS readout. */
   const fpsRef = useRef({ stamps: [] as number[], value: 0, lastFeed: 0 })
   // Latest measured canvas size, read imperatively so drawing never depends on
@@ -287,13 +359,14 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
     ctx.lineJoin = 'round'
     ctx.lineCap = 'round'
     ctx.lineWidth = Math.max(1.1, Math.min(w, h) / 140)
+    const quality = qualityRef.current
     drawPhosphorTraces(ctx, buffers.current, channels, {
       cx,
       cy,
       px,
       now: m.time,
       persistSec,
-    })
+    }, quality)
     drawScopeHud(ctx, {
       w,
       h,
@@ -303,6 +376,7 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
       time: m.time,
       fpsValue: fpsRef.current.value,
       lastFeed: fpsRef.current.lastFeed,
+      quality,
     })
   }, [])
 
@@ -341,7 +415,7 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
     if (channels.length === 0) return
     accumulate(machine, channels)
     render(machine, channels)
-  }, [machine, canvasSize, accumulate, render])
+  }, [machine, canvasSize, phosphorQuality, accumulate, render])
 
   const channels = scopeChannelsFor(machine.nodes)
   const isVehicle = channels.some((c) => c.id === 'wheelL')
