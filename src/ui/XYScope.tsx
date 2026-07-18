@@ -45,6 +45,183 @@ function persistFor(
   return base * Math.max(0.05, timeScale)
 }
 
+function appendPhosphorBatch(
+  buffers: Record<string, Pt[]>,
+  batch: NonNullable<MachineState['phosphorBatch']>,
+  channels: ScopeChannel[],
+): void {
+  for (const sample of batch) {
+    for (const ch of channels) {
+      const pt = sample.channels[ch.id]
+      if (!pt) continue
+      const buf = buffers[ch.id] ?? []
+      buf.push({ x: pt.x, y: pt.y, t: sample.t })
+      buffers[ch.id] = buf
+    }
+  }
+}
+
+function trimPhosphorBuffers(
+  buffers: Record<string, Pt[]>,
+  cutoff: number,
+  persistSec: number,
+): void {
+  // Keep enough points that long-persist orbits (Lorenz/Duffing) aren't
+  // truncated before their persistence window elapses.
+  const maxPoints = Math.min(8000, Math.max(800, Math.ceil(persistSec * 500)))
+  for (const id of Object.keys(buffers)) {
+    const buf = buffers[id]!
+    while (buf.length > 0 && buf[0]!.t < cutoff) buf.shift()
+    if (buf.length > maxPoints) buf.splice(0, buf.length - maxPoints)
+  }
+}
+
+function syncCanvasSize(
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+): void {
+  const dpr = window.devicePixelRatio || 1
+  const tw = Math.floor(w * dpr)
+  const th = Math.floor(h * dpr)
+  if (canvas.width !== tw || canvas.height !== th) {
+    canvas.width = tw
+    canvas.height = th
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+
+function drawScopeGrid(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+): void {
+  ctx.strokeStyle = 'rgba(20, 50, 34, 0.55)'
+  ctx.lineWidth = 1
+  const grid = Math.max(16, Math.round(Math.min(w, h) / 12))
+  for (let x = 0; x < w; x += grid) {
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, h)
+    ctx.stroke()
+  }
+  for (let y = 0; y < h; y += grid) {
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(w, y)
+    ctx.stroke()
+  }
+}
+
+function bufferStride(length: number): number {
+  if (length > 1200) return 4
+  if (length > 500) return 2
+  return 1
+}
+
+function drawPhosphorBand(
+  ctx: CanvasRenderingContext2D,
+  buf: Pt[],
+  stride: number,
+  lo: number,
+  hi: number,
+  now: number,
+  persistSec: number,
+  cx: number,
+  cy: number,
+  px: number,
+): void {
+  const alpha = Math.max(0.08, 1 - (lo + hi) / 2)
+  ctx.strokeStyle = `rgba(57, 255, 122, ${alpha.toFixed(3)})`
+  ctx.beginPath()
+  let drawing = false
+  for (let i = stride; i < buf.length; i += stride) {
+    const b = buf[i]!
+    const ageNorm = (now - b.t) / persistSec
+    if (ageNorm < lo || ageNorm >= hi) {
+      drawing = false
+      continue
+    }
+    const a = buf[i - stride]!
+    const x0 = cx + a.x * px
+    const y0 = cy - a.y * px
+    const x1 = cx + b.x * px
+    const y1 = cy - b.y * px
+    if (!drawing) {
+      ctx.moveTo(x0, y0)
+      drawing = true
+    }
+    ctx.lineTo(x1, y1)
+  }
+  ctx.stroke()
+}
+
+function drawPhosphorTraces(
+  ctx: CanvasRenderingContext2D,
+  buffers: Record<string, Pt[]>,
+  channels: ScopeChannel[],
+  view: {
+    cx: number
+    cy: number
+    px: number
+    now: number
+    persistSec: number
+  },
+): void {
+  const BANDS = 6
+  for (const ch of channels) {
+    const buf = buffers[ch.id]
+    if (!buf || buf.length < 2) continue
+    const stride = bufferStride(buf.length)
+    for (let band = 0; band < BANDS; band++) {
+      drawPhosphorBand(
+        ctx,
+        buf,
+        stride,
+        band / BANDS,
+        (band + 1) / BANDS,
+        view.now,
+        view.persistSec,
+        view.cx,
+        view.cy,
+        view.px,
+      )
+    }
+  }
+}
+
+function drawScopeHud(
+  ctx: CanvasRenderingContext2D,
+  opts: {
+    w: number
+    h: number
+    isVehicle: boolean
+    persistSec: number
+    channelLabel?: string
+    time: number
+    fpsValue: number
+    lastFeed: number
+  },
+): void {
+  const { w, h, isVehicle, persistSec, channelLabel, time, fpsValue, lastFeed } =
+    opts
+  ctx.fillStyle = '#2a8f55'
+  const fontPx = Math.max(10, Math.round(h / 28))
+  ctx.font = `${fontPx}px IBM Plex Sans, monospace`
+  const persistLabel =
+    persistSec >= 10 ? persistSec.toFixed(0) : persistSec.toFixed(1)
+  const header = isVehicle
+    ? `X/Y mux · draw ~16 Hz · persist ${persistLabel}s`
+    : `${channelLabel ?? 'X/Y orbit'} · persist ${persistLabel}s`
+  ctx.fillText(header, 8, Math.max(14, h * 0.08))
+  const fpsFresh = performance.now() - lastFeed < 500
+  const fpsLabel = fpsFresh ? `${Math.round(fpsValue)} fps` : '— fps'
+  ctx.fillText(`t = ${time.toFixed(2)} s`, 8, h - 8)
+  const fpsWidth = ctx.measureText(fpsLabel).width
+  ctx.fillText(fpsLabel, Math.max(8, w - 8 - fpsWidth), h - 8)
+}
+
 /** Shared phosphor X/Y oscilloscope for vehicle mux or single-trace orbits. */
 export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
   { machine },
@@ -79,38 +256,20 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
 
   /** Reset detection + phosphor accumulation (only while operating). */
   const accumulate = useCallback((m: MachineState, channels: ScopeChannel[]) => {
-    if (
+    const restarted =
       (lastMode.current !== 'operate' && m.mode === 'operate') ||
       m.time < lastTime.current
-    ) {
-      buffers.current = {}
-    }
+    if (restarted) buffers.current = {}
     lastMode.current = m.mode
     lastTime.current = m.time
 
     const batch = m.phosphorBatch
-    if (!(m.powered && m.mode === 'operate' && batch && batch.length > 0)) return
+    if (!m.powered || m.mode !== 'operate' || !batch?.length) return
 
     const isVehicle = channels.some((c) => c.id === 'wheelL')
     const persistSec = persistFor(channels, isVehicle, m.timeScale)
-    for (const sample of batch) {
-      for (const ch of channels) {
-        const pt = sample.channels[ch.id]
-        if (!pt) continue
-        const buf = buffers.current[ch.id] ?? []
-        buf.push({ x: pt.x, y: pt.y, t: sample.t })
-        buffers.current[ch.id] = buf
-      }
-    }
-    const cutoff = m.time - persistSec
-    // Keep enough points that long-persist orbits (Lorenz/Duffing) aren't
-    // truncated before their persistence window elapses.
-    const maxPoints = Math.min(8000, Math.max(800, Math.ceil(persistSec * 500)))
-    for (const id of Object.keys(buffers.current)) {
-      const buf = buffers.current[id]!
-      while (buf.length > 0 && buf[0]!.t < cutoff) buf.shift()
-      if (buf.length > maxPoints) buf.splice(0, buf.length - maxPoints)
-    }
+    appendPhosphorBatch(buffers.current, batch, channels)
+    trimPhosphorBuffers(buffers.current, m.time - persistSec, persistSec)
   }, [])
 
   /** Render the current buffers to the canvas (no accumulation). */
@@ -123,16 +282,7 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
     const isVehicle = channels.some((c) => c.id === 'wheelL')
     const persistSec = persistFor(channels, isVehicle, m.timeScale)
     const { w, h } = sizeRef.current
-
-    const dpr = window.devicePixelRatio || 1
-    if (
-      canvas.width !== Math.floor(w * dpr) ||
-      canvas.height !== Math.floor(h * dpr)
-    ) {
-      canvas.width = Math.floor(w * dpr)
-      canvas.height = Math.floor(h * dpr)
-    }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    syncCanvasSize(canvas, ctx, w, h)
 
     const cx = w / 2
     const cy = h / 2
@@ -141,86 +291,28 @@ export const XYScope = forwardRef<XYScopeHandle, XYScopeProps>(function XYScope(
 
     ctx.fillStyle = '#030503'
     ctx.fillRect(0, 0, w, h)
-
-    ctx.strokeStyle = 'rgba(20, 50, 34, 0.55)'
-    ctx.lineWidth = 1
-    const grid = Math.max(16, Math.round(Math.min(w, h) / 12))
-    for (let x = 0; x < w; x += grid) {
-      ctx.beginPath()
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, h)
-      ctx.stroke()
-    }
-    for (let y = 0; y < h; y += grid) {
-      ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.lineTo(w, y)
-      ctx.stroke()
-    }
+    drawScopeGrid(ctx, w, h)
 
     ctx.lineJoin = 'round'
     ctx.lineCap = 'round'
     ctx.lineWidth = Math.max(1.1, Math.min(w, h) / 140)
-
-    // Phosphor fade in a few alpha bands (one stroke each) instead of a
-    // shadowBlur + stroke per segment — that path was ~O(points) GPU work and
-    // crushed complex-orbit presets on modest CPUs.
-    const BANDS = 6
-    const now = m.time
-    for (const ch of channels) {
-      const buf = buffers.current[ch.id]
-      if (!buf || buf.length < 2) continue
-      let stride = 1
-      if (buf.length > 1200) stride = 4
-      else if (buf.length > 500) stride = 2
-      for (let band = 0; band < BANDS; band++) {
-        const lo = band / BANDS
-        const hi = (band + 1) / BANDS
-        const alpha = Math.max(0.08, 1 - (lo + hi) / 2)
-        ctx.strokeStyle = `rgba(57, 255, 122, ${alpha.toFixed(3)})`
-        ctx.beginPath()
-        let drawing = false
-        for (let i = stride; i < buf.length; i += stride) {
-          const b = buf[i]!
-          const ageNorm = (now - b.t) / persistSec
-          if (ageNorm < lo || ageNorm >= hi) {
-            drawing = false
-            continue
-          }
-          const a = buf[i - stride]!
-          const x0 = cx + a.x * px
-          const y0 = cy - a.y * px
-          const x1 = cx + b.x * px
-          const y1 = cy - b.y * px
-          if (!drawing) {
-            ctx.moveTo(x0, y0)
-            drawing = true
-          }
-          ctx.lineTo(x1, y1)
-        }
-        ctx.stroke()
-      }
-    }
-
-    ctx.fillStyle = '#2a8f55'
-    const fontPx = Math.max(10, Math.round(h / 28))
-    ctx.font = `${fontPx}px IBM Plex Sans, monospace`
-    const persistLabel =
-      persistSec >= 10 ? persistSec.toFixed(0) : persistSec.toFixed(1)
-    ctx.fillText(
-      isVehicle
-        ? `X/Y mux · draw ~16 Hz · persist ${persistLabel}s`
-        : `${channels[0]?.label ?? 'X/Y orbit'} · persist ${persistLabel}s`,
-      8,
-      Math.max(14, h * 0.08),
-    )
-    const wallNow = performance.now()
-    const fpsFresh = wallNow - fpsRef.current.lastFeed < 500
-    const fpsLabel = fpsFresh ? `${Math.round(fpsRef.current.value)} fps` : '— fps'
-    const timeLabel = `t = ${m.time.toFixed(2)} s`
-    ctx.fillText(timeLabel, 8, h - 8)
-    const fpsWidth = ctx.measureText(fpsLabel).width
-    ctx.fillText(fpsLabel, Math.max(8, w - 8 - fpsWidth), h - 8)
+    drawPhosphorTraces(ctx, buffers.current, channels, {
+      cx,
+      cy,
+      px,
+      now: m.time,
+      persistSec,
+    })
+    drawScopeHud(ctx, {
+      w,
+      h,
+      isVehicle,
+      persistSec,
+      channelLabel: channels[0]?.label,
+      time: m.time,
+      fpsValue: fpsRef.current.value,
+      lastFeed: fpsRef.current.lastFeed,
+    })
   }, [])
 
   // Per-frame feed from the animation loop: accumulate + draw at 60 fps without

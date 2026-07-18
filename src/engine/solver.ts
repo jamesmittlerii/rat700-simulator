@@ -55,57 +55,57 @@ function isAlgebraic(kind: CircuitNode['kind']): boolean {
   )
 }
 
-export function evaluateAlgebraic(
+function seedFixedVoltages(
   nodes: CircuitNode[],
-  cables: Cable[],
   states: Record<string, number>,
-  mode: MachineMode,
-  time = 0,
-): EvalResult {
-  const byId = nodeById(nodes)
-  const inputMap = buildInputMap(cables)
-  const voltages: Record<string, number> = {}
-  const overloaded = new Set<string>()
-  let warning: string | undefined
-
+  time: number,
+  voltages: Record<string, number>,
+): void {
   for (const n of nodes) {
+    const out = portKey({ nodeId: n.id, port: 'out' })
     if (n.kind === 'reference') {
-      voltages[portKey({ nodeId: n.id, port: 'out' })] = n.voltage ?? 0
+      voltages[out] = n.voltage ?? 0
     } else if (n.kind === 'signal') {
-      voltages[portKey({ nodeId: n.id, port: 'out' })] = signalOutput(
+      voltages[out] = signalOutput(
         time,
         n.waveform ?? 'road',
         n.amplitude ?? 1.5,
         n.frequency ?? 2.2,
       )
     } else if (n.kind === 'integrator') {
-      voltages[portKey({ nodeId: n.id, port: 'out' })] =
-        states[n.id] ?? n.state ?? 0
+      voltages[out] = states[n.id] ?? n.state ?? 0
     }
   }
+}
 
-  const algebraic = nodes.filter((n) => isAlgebraic(n.kind))
+function algebraicDepsFor(
+  node: CircuitNode,
+  inputMap: Map<string, string>,
+  byId: Map<string, CircuitNode>,
+): Set<string> {
+  const set = new Set<string>()
+  for (const p of portsFor(node.kind, node)) {
+    if (p.direction !== 'in') continue
+    const src = inputMap.get(portKey({ nodeId: node.id, port: p.name }))
+    if (!src) continue
+    const srcNode = byId.get(src.split(':')[0])
+    if (srcNode && isAlgebraic(srcNode.kind)) set.add(srcNode.id)
+  }
+  return set
+}
 
+function topologicalOrder(
+  algebraic: CircuitNode[],
+  inputMap: Map<string, string>,
+  byId: Map<string, CircuitNode>,
+): { order: string[]; warning?: string } {
   const deps = new Map<string, Set<string>>()
   for (const n of algebraic) {
-    const set = new Set<string>()
-    for (const p of portsFor(n.kind, n)) {
-      if (p.direction !== 'in') continue
-      const src = inputMap.get(portKey({ nodeId: n.id, port: p.name }))
-      if (!src) continue
-      const srcNodeId = src.split(':')[0]
-      const srcNode = byId.get(srcNodeId)
-      if (srcNode && isAlgebraic(srcNode.kind)) {
-        set.add(srcNodeId)
-      }
-    }
-    deps.set(n.id, set)
+    deps.set(n.id, algebraicDepsFor(n, inputMap, byId))
   }
 
   const inDegree = new Map<string, number>()
-  for (const [id, set] of deps) {
-    inDegree.set(id, set.size)
-  }
+  for (const [id, set] of deps) inDegree.set(id, set.size)
 
   const queue: string[] = []
   for (const [id, deg] of inDegree) {
@@ -119,74 +119,85 @@ export function evaluateAlgebraic(
     order.push(id)
     remaining.delete(id)
     for (const [other, set] of deps) {
-      if (set.has(id)) {
-        set.delete(id)
-        const deg = (inDegree.get(other) ?? 1) - 1
-        inDegree.set(other, deg)
-        if (deg === 0) queue.push(other)
-      }
+      if (!set.has(id)) continue
+      set.delete(id)
+      const deg = (inDegree.get(other) ?? 1) - 1
+      inDegree.set(other, deg)
+      if (deg === 0) queue.push(other)
     }
   }
 
-  if (remaining.size > 0) {
-    warning =
-      'Ungrounded algebraic feedback loop — patch may be invalid.'
-    order.push(...remaining)
+  if (remaining.size === 0) return { order }
+  order.push(...remaining)
+  return {
+    order,
+    warning: 'Ungrounded algebraic feedback loop — patch may be invalid.',
   }
+}
 
-  const readInput = (ref: PortRef): number => {
-    const src = inputMap.get(portKey(ref))
-    if (!src) return 0
-    return voltages[src] ?? 0
-  }
+type ReadInput = (ref: PortRef) => number
 
-  for (const id of order) {
-    const n = byId.get(id)!
-    if (n.kind === 'potentiometer') {
+function evalAlgebraicNode(
+  n: CircuitNode,
+  voltages: Record<string, number>,
+  readInput: ReadInput,
+): void {
+  const out = portKey({ nodeId: n.id, port: 'out' })
+  switch (n.kind) {
+    case 'potentiometer': {
       const vin = readInput({ nodeId: n.id, port: 'in' })
-      voltages[portKey({ nodeId: n.id, port: 'out' })] = potOutput(
-        vin,
-        n.coefficient ?? 0,
-      )
-    } else if (n.kind === 'inverter') {
+      voltages[out] = potOutput(vin, n.coefficient ?? 0)
+      return
+    }
+    case 'inverter': {
       const vin = readInput({ nodeId: n.id, port: 'in' })
-      voltages[portKey({ nodeId: n.id, port: 'out' })] = inverterOutput(vin)
-    } else if (n.kind === 'summer') {
+      voltages[out] = inverterOutput(vin)
+      return
+    }
+    case 'summer': {
       const inputs = SUM_PORTS.map((p) => readInput({ nodeId: n.id, port: p }))
       const gains = SUM_PORTS.map((p) => gainFor(n, p))
-      voltages[portKey({ nodeId: n.id, port: 'out' })] = summerOutput(
-        inputs,
-        gains,
-      )
-    } else if (n.kind === 'functionGenerator') {
+      voltages[out] = summerOutput(inputs, gains)
+      return
+    }
+    case 'functionGenerator': {
       const vin = readInput({ nodeId: n.id, port: 'in' })
-      voltages[portKey({ nodeId: n.id, port: 'out' })] =
-        functionGeneratorOutput(vin, n.breakpoints ?? [])
-    } else if (n.kind === 'multiplier') {
+      voltages[out] = functionGeneratorOutput(vin, n.breakpoints ?? [])
+      return
+    }
+    case 'multiplier': {
       const xp = readInput({ nodeId: n.id, port: 'xp' })
       const xm = readInput({ nodeId: n.id, port: 'xm' })
       const yp = readInput({ nodeId: n.id, port: 'yp' })
       const ym = readInput({ nodeId: n.id, port: 'ym' })
-      const x = bipolarInput(xp, xm)
-      const y = bipolarInput(yp, ym)
-      const product = multiplierOutput(x, y)
-      voltages[portKey({ nodeId: n.id, port: 'out' })] = product
+      const product = multiplierOutput(bipolarInput(xp, xm), bipolarInput(yp, ym))
+      voltages[out] = product
       voltages[portKey({ nodeId: n.id, port: 'g' })] = product
+      return
     }
+    default:
+      return
   }
+}
 
-  if (mode === 'ic' || mode === 'potSet') {
-    for (const n of nodes) {
-      if (n.kind !== 'integrator') continue
-      const icSrc = inputMap.get(portKey({ nodeId: n.id, port: 'ic' }))
-      let out = n.initialCondition ?? 0
-      if (icSrc !== undefined) {
-        out = voltages[icSrc] ?? out
-      }
-      voltages[portKey({ nodeId: n.id, port: 'out' })] = out
-    }
+function applyIntegratorIc(
+  nodes: CircuitNode[],
+  inputMap: Map<string, string>,
+  voltages: Record<string, number>,
+): void {
+  for (const n of nodes) {
+    if (n.kind !== 'integrator') continue
+    const icSrc = inputMap.get(portKey({ nodeId: n.id, port: 'ic' }))
+    let out = n.initialCondition ?? 0
+    if (icSrc !== undefined) out = voltages[icSrc] ?? out
+    voltages[portKey({ nodeId: n.id, port: 'out' })] = out
   }
+}
 
+function computeIntegratorDerivatives(
+  nodes: CircuitNode[],
+  readInput: ReadInput,
+): Record<string, number> {
   const derivatives: Record<string, number> = {}
   for (const n of nodes) {
     if (n.kind !== 'integrator') continue
@@ -195,14 +206,52 @@ export function evaluateAlgebraic(
     const tf = (n.timeFactor ?? 1) as TimeFactor
     derivatives[n.id] = integratorDerivative(inputs, gains, tf)
   }
+  return derivatives
+}
 
+function collectOverloads(voltages: Record<string, number>): Set<string> {
+  const overloaded = new Set<string>()
   for (const [key, v] of Object.entries(voltages)) {
-    if (Math.abs(v) > OVERLOAD_THRESHOLD) {
-      overloaded.add(key.split(':')[0])
-    }
+    if (Math.abs(v) > OVERLOAD_THRESHOLD) overloaded.add(key.split(':')[0])
+  }
+  return overloaded
+}
+
+export function evaluateAlgebraic(
+  nodes: CircuitNode[],
+  cables: Cable[],
+  states: Record<string, number>,
+  mode: MachineMode,
+  time = 0,
+): EvalResult {
+  const byId = nodeById(nodes)
+  const inputMap = buildInputMap(cables)
+  const voltages: Record<string, number> = {}
+  seedFixedVoltages(nodes, states, time, voltages)
+
+  const algebraic = nodes.filter((n) => isAlgebraic(n.kind))
+  const { order, warning } = topologicalOrder(algebraic, inputMap, byId)
+
+  const readInput: ReadInput = (ref) => {
+    const src = inputMap.get(portKey(ref))
+    if (!src) return 0
+    return voltages[src] ?? 0
   }
 
-  return { voltages, derivatives, overloaded, warning }
+  for (const id of order) {
+    evalAlgebraicNode(byId.get(id)!, voltages, readInput)
+  }
+
+  if (mode === 'ic' || mode === 'potSet') {
+    applyIntegratorIc(nodes, inputMap, voltages)
+  }
+
+  return {
+    voltages,
+    derivatives: computeIntegratorDerivatives(nodes, readInput),
+    overloaded: collectOverloads(voltages),
+    warning,
+  }
 }
 
 export function rk4Step(
