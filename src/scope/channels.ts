@@ -37,35 +37,34 @@ export const OSCILLATOR_SCOPE_CHANNELS: ScopeChannel[] = [
 ]
 
 /**
+ * First matching pair of node ids wins. Order matters: vehicle figure
+ * generator before chaos / oscillator orbits. Channels are resolved via
+ * getters so circular preset↔channels imports stay lazy.
+ */
+const SCOPE_MATCHERS: readonly {
+  readonly a: string
+  readonly b: string
+  readonly channels: () => readonly ScopeChannel[]
+}[] = [
+  { a: 'sum_xL', b: 'sum_yw', channels: () => VEHICLE_SCOPE_CHANNELS },
+  { a: 'lorenz_x', b: 'lorenz_z', channels: () => LORENZ_SCOPE_CHANNELS },
+  { a: 'ross_x', b: 'ross_y', channels: () => ROSSLER_SCOPE_CHANNELS },
+  { a: 'vdp_x', b: 'vdp_v', channels: () => VAN_DER_POL_SCOPE_CHANNELS },
+  { a: 'mathieu_x', b: 'mathieu_v', channels: () => MATHIEU_SCOPE_CHANNELS },
+  { a: 'duffing_x', b: 'duffing_v', channels: () => DUFFING_SCOPE_CHANNELS },
+  { a: 'ss3_xA', b: 'ss3_yA', channels: () => SOFT_SPRING_SCOPE_CHANNELS },
+  { a: 'int_1', b: 'int_2', channels: () => OSCILLATOR_SCOPE_CHANNELS },
+]
+
+/**
  * Pick X/Y mux channels for the current patch.
  * Vehicle figure generator wins when present; then Lorenz butterfly; else the
  * classic oscillator orbit.
  */
 export function scopeChannelsFor(nodes: CircuitNode[]): ScopeChannel[] {
   const ids = new Set(nodes.map((n) => n.id))
-  if (ids.has('sum_xL') && ids.has('sum_yw')) {
-    return [...VEHICLE_SCOPE_CHANNELS]
-  }
-  if (ids.has('lorenz_x') && ids.has('lorenz_z')) {
-    return [...LORENZ_SCOPE_CHANNELS]
-  }
-  if (ids.has('ross_x') && ids.has('ross_y')) {
-    return [...ROSSLER_SCOPE_CHANNELS]
-  }
-  if (ids.has('vdp_x') && ids.has('vdp_v')) {
-    return [...VAN_DER_POL_SCOPE_CHANNELS]
-  }
-  if (ids.has('mathieu_x') && ids.has('mathieu_v')) {
-    return [...MATHIEU_SCOPE_CHANNELS]
-  }
-  if (ids.has('duffing_x') && ids.has('duffing_v')) {
-    return [...DUFFING_SCOPE_CHANNELS]
-  }
-  if (ids.has('ss3_xA') && ids.has('ss3_yA')) {
-    return [...SOFT_SPRING_SCOPE_CHANNELS]
-  }
-  if (ids.has('int_1') && ids.has('int_2')) {
-    return OSCILLATOR_SCOPE_CHANNELS
+  for (const { a, b, channels } of SCOPE_MATCHERS) {
+    if (ids.has(a) && ids.has(b)) return [...channels()]
   }
   return []
 }
