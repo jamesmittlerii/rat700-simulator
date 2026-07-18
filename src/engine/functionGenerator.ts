@@ -72,7 +72,7 @@ export function functionGeneratorOutput(
   if (breakpoints.length === 0) return 0
   const pts = [...breakpoints].sort((a, b) => a.x - b.x)
   if (input <= pts[0]!.x) return pts[0]!.y
-  if (input >= pts[pts.length - 1]!.x) return pts[pts.length - 1]!.y
+  if (input >= pts.at(-1)!.x) return pts.at(-1)!.y
   for (let i = 0; i < pts.length - 1; i++) {
     const a = pts[i]!
     const b = pts[i + 1]!
@@ -81,7 +81,7 @@ export function functionGeneratorOutput(
       return a.y + t * (b.y - a.y)
     }
   }
-  return pts[pts.length - 1]!.y
+  return pts.at(-1)!.y
 }
 
 /**

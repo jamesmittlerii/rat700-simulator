@@ -19,12 +19,12 @@ const NODE_W = 140
 const NODE_H_BASE = 56
 
 interface SchematicCanvasProps {
-  machine: MachineState
-  selectedId: string | null
-  onSelect: (id: string | null) => void
-  onMoveNode: (id: string, x: number, y: number) => void
-  onConnect: (from: PortRef, to: PortRef) => void
-  onRemoveCable: (cableId: string) => void
+  readonly machine: MachineState
+  readonly selectedId: string | null
+  readonly onSelect: (id: string | null) => void
+  readonly onMoveNode: (id: string, x: number, y: number) => void
+  readonly onConnect: (from: PortRef, to: PortRef) => void
+  readonly onRemoveCable: (cableId: string) => void
 }
 
 function jackPosition(

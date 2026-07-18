@@ -5,7 +5,6 @@
 import { portsFor } from '../engine/elements'
 import type { CircuitNode, PortDef, PortDirection, PortRef } from '../engine/types'
 import {
-  AMP_PRIMARY_COL,
   AMP_SLOTS,
   AMP_STRIPS,
   COMPARATOR_BLOCKS,
@@ -20,21 +19,16 @@ import {
   POT_COLS,
   POT_SECTIONS,
   POT_SLOTS,
-  ROW_LETTERS,
   SWITCHABLE_BLOCKS,
   UNGROUNDED_POT_NUMBERS,
   ampInputPlan,
   ampStrip,
   ampTrayRows,
-  diodeBlocksAmpTray,
   freeDiodeLabel,
   isFreeDiodeCell,
-  isSwitchableAmp,
   jackId,
-  modeJumperSites,
   rowIndex,
   rowLetter,
-  timeJumperSites,
   type RowLetter,
 } from './jackMap'
 
@@ -43,9 +37,7 @@ export {
   PATCH_ROWS,
   POT_SLOTS,
   AMP_SLOTS,
-  ROW_LETTERS,
   SWITCHABLE_BLOCKS,
-  AMP_PRIMARY_COL,
   AMP_STRIPS,
   COMPARATOR_BLOCKS,
   FG_COLS,
@@ -57,19 +49,24 @@ export {
   POT_COLS,
   POT_SECTIONS,
   UNGROUNDED_POT_NUMBERS,
-  isSwitchableAmp,
   jackId,
-  modeJumperSites,
-  timeJumperSites,
   rowLetter,
   rowIndex,
   ampInputPlan,
   ampStrip,
   ampTrayRows,
-  diodeBlocksAmpTray,
   freeDiodeLabel,
   isFreeDiodeCell,
 }
+
+export {
+  ROW_LETTERS,
+  AMP_PRIMARY_COL,
+  isSwitchableAmp,
+  modeJumperSites,
+  timeJumperSites,
+  diodeBlocksAmpTray,
+} from './jackMap'
 
 export const AMP_COLS = 15
 
@@ -339,8 +336,7 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
         )
       } else {
         for (const step of ampInputPlan(ampNumber)) {
-          const p = ports.find((x) => x.name === step.port)
-          if (!p) continue
+          if (!ports.some((x) => x.name === step.port)) continue
           place(
             cell(
               leftCol,
@@ -376,8 +372,10 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
           )
         }
       } else if (amp.kind === 'summer' && !traySplit) {
-        const r = ports.find((x) => x.name === 'r')
-        if (r && !isFreeDiodeCell(leftCol, trayAuxRow)) {
+        if (
+          ports.some((x) => x.name === 'r') &&
+          !isFreeDiodeCell(leftCol, trayAuxRow)
+        ) {
           place(
             cell(
               leftCol,
@@ -390,8 +388,10 @@ export function buildPatchLayout(nodes: CircuitNode[]): PatchCell[] {
             ),
           )
         }
-        const g = ports.find((x) => x.name === 'g')
-        if (g && !isFreeDiodeCell(rightCol, trayAuxRow)) {
+        if (
+          ports.some((x) => x.name === 'g') &&
+          !isFreeDiodeCell(rightCol, trayAuxRow)
+        ) {
           place(
             cell(
               rightCol,
@@ -860,7 +860,7 @@ export function findPortCell(
   ref: PortRef,
 ): PatchCell | undefined {
   return cells.find(
-    (c) => c.ref && c.ref.nodeId === ref.nodeId && c.ref.port === ref.port,
+    (c) => c.ref?.nodeId === ref.nodeId && c.ref.port === ref.port,
   )
 }
 

@@ -325,13 +325,13 @@ function FgKnob({
   onSelect,
   onChange,
 }: {
-  index: number
-  value: number
-  k: number
-  disabled: boolean
-  label: string
-  onSelect: () => void
-  onChange: (y: number) => void
+  readonly index: number
+  readonly value: number
+  readonly k: number
+  readonly disabled: boolean
+  readonly label: string
+  readonly onSelect: () => void
+  readonly onChange: (y: number) => void
 }) {
   const onWheel = (e: ReactWheelEvent) => {
     if (disabled) return
@@ -393,12 +393,12 @@ function PotDial({
   onSelect,
   onChange,
 }: {
-  value: number
-  disabled: boolean
-  selected: boolean
-  label: string
-  onSelect: () => void
-  onChange: (k: number) => void
+  readonly value: number
+  readonly disabled: boolean
+  readonly selected: boolean
+  readonly label: string
+  readonly onSelect: () => void
+  readonly onChange: (k: number) => void
 }) {
   const onWheel = (e: ReactWheelEvent) => {
     if (disabled) return
@@ -452,8 +452,8 @@ function Galvanometer({
   value,
   caption,
 }: {
-  value: number
-  caption: string
+  readonly value: number
+  readonly caption: string
 }) {
   const clamped = Math.max(-10, Math.min(10, value))
   const angle = (clamped / 10) * 55
@@ -509,14 +509,14 @@ function PatchBay({
   onJumper,
   onAutoShutdown,
 }: {
-  machine: MachineState
-  selectedId: string | null
-  onSelect: (id: string | null) => void
-  onConnect: (from: PortRef, to: PortRef, color?: string) => void
-  onRemoveCable: (cableId: string) => void
-  onCableColor: (cableId: string, color: string) => void
-  onJumper: (jumper: JumperPlacement) => void
-  onAutoShutdown: (on: boolean) => void
+  readonly machine: MachineState
+  readonly selectedId: string | null
+  readonly onSelect: (id: string | null) => void
+  readonly onConnect: (from: PortRef, to: PortRef, color?: string) => void
+  readonly onRemoveCable: (cableId: string) => void
+  readonly onCableColor: (cableId: string, color: string) => void
+  readonly onJumper: (jumper: JumperPlacement) => void
+  readonly onAutoShutdown: (on: boolean) => void
 }) {
   // The board layout depends only on the patch *structure* (node kinds/ids/
   // labels/reference voltages), not on live integrator state. machine.nodes

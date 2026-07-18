@@ -80,7 +80,7 @@ function mergeIntervals(intervals: [number, number][]): [number, number][] {
     .sort((p, q) => p[0] - q[0] || p[1] - q[1])
   const out: [number, number][] = []
   for (const [a, b] of sorted) {
-    const last = out[out.length - 1]
+    const last = out.at(-1)
     if (!last || a > last[1] + 1e-9) out.push([a, b])
     else last[1] = Math.max(last[1], b)
   }
@@ -125,7 +125,7 @@ export function buildSilkSectionLines(): SilkSegment[] {
   for (const section of POT_SECTIONS) {
     const cols = [...section.cols]
     const x0 = cols[0]! - 1
-    const x1 = cols[cols.length - 1]!
+    const x1 = cols.at(-1)!
     const y0 = rowIndex('l')
     const yM = rowIndex('m') + 1
     const yN = rowIndex('n') + 1
@@ -163,7 +163,7 @@ export function buildSilkSectionLines(): SilkSegment[] {
   {
     const cols = [...MASSE_P_COLS]
     const x0 = cols[0]! - 1
-    const x1 = cols[cols.length - 1]!
+    const x1 = cols.at(-1)!
     const yTop = rowIndex('o')
     const yMid = rowIndex('p')
     const yBot = rowIndex('p') + 1
@@ -221,13 +221,15 @@ export function buildSilkSections(): SilkRect[] {
   }
 
   // Funktionsgeber columns a–d.
-  boxes.push(sectionBox(FG_COLS.F1, FG_COLS.F1, 'a', 'd'))
-  boxes.push(sectionBox(FG_COLS.F2, FG_COLS.F2, 'a', 'd'))
+  boxes.push(
+    sectionBox(FG_COLS.F1, FG_COLS.F1, 'a', 'd'),
+    sectionBox(FG_COLS.F2, FG_COLS.F2, 'a', 'd'),
+  )
 
   // Multiplikator banks a–d.
   for (const bank of MULTIPLIER_BANKS) {
     const cols = bank.cols
-    boxes.push(sectionBox(cols[0], cols[cols.length - 1]!, 'a', 'd'))
+    boxes.push(sectionBox(cols[0], cols.at(-1)!, 'a', 'd'))
   }
 
   // Potentiometer sections are drawn as L-shapes in buildSilkSectionLines
@@ -236,17 +238,16 @@ export function buildSilkSections(): SilkRect[] {
   // Freie Dioden l–o.
   for (const block of FREE_DIODE_BLOCKS) {
     const cols = block.cols
-    boxes.push(sectionBox(cols[0], cols[cols.length - 1]!, 'l', 'o'))
+    boxes.push(sectionBox(cols[0], cols.at(-1)!, 'l', 'o'))
   }
 
   // Potentialfreie Stützpunkte.
-  boxes.push(sectionBox(6, 6, 'l', 'o'))
-  boxes.push(sectionBox(25, 25, 'l', 'o'))
+  boxes.push(sectionBox(6, 6, 'l', 'o'), sectionBox(25, 25, 'l', 'o'))
 
   // Komparator-Relais row p.
   for (const block of COMPARATOR_BLOCKS) {
     const cols = block.cols
-    boxes.push(sectionBox(cols[0], cols[cols.length - 1]!, block.row, block.row))
+    boxes.push(sectionBox(cols[0], cols.at(-1)!, block.row, block.row))
   }
 
   // Masse is drawn as an L-outline in buildSilkSectionLines
@@ -255,7 +256,7 @@ export function buildSilkSections(): SilkRect[] {
   // +ME/−ME metering under each pot section.
   for (const block of ME_BLOCKS) {
     const cols = block.cols
-    boxes.push(sectionBox(cols[0], cols[cols.length - 1]!, 'n', 'o'))
+    boxes.push(sectionBox(cols[0], cols.at(-1)!, 'n', 'o'))
   }
 
   // Abschaltleitung (AS) — bottom left.
@@ -265,23 +266,19 @@ export function buildSilkSections(): SilkRect[] {
   boxes.push(
     sectionBox(
       VERFUEGBAR_LEFT_COLS[0],
-      VERFUEGBAR_LEFT_COLS[VERFUEGBAR_LEFT_COLS.length - 1]!,
+      VERFUEGBAR_LEFT_COLS.at(-1)!,
       'p',
       'p',
     ),
-  )
-  boxes.push(
     sectionBox(
       VERFUEGBAR_RIGHT_COLS[0],
-      VERFUEGBAR_RIGHT_COLS[VERFUEGBAR_RIGHT_COLS.length - 1]!,
+      VERFUEGBAR_RIGHT_COLS.at(-1)!,
       'p',
       'p',
     ),
+    sectionBox(VERFUEGBAR_EDGE_COL, VERFUEGBAR_EDGE_COL, 'n', 'n'),
+    sectionBox(VERFUEGBAR_EDGE_COL, VERFUEGBAR_EDGE_COL, 'o', 'o'),
   )
-
-  // verfügbar right-edge utility — n30 and o30 are separate silk boxes.
-  boxes.push(sectionBox(VERFUEGBAR_EDGE_COL, VERFUEGBAR_EDGE_COL, 'n', 'n'))
-  boxes.push(sectionBox(VERFUEGBAR_EDGE_COL, VERFUEGBAR_EDGE_COL, 'o', 'o'))
 
   return boxes
 }
@@ -320,14 +317,13 @@ export function buildSilkTies(): SilkSegment[] {
   }
 
   // Masse ground bus on row p, with stubs up to o13 / o18.
-  segs.push(hTie(MASSE_P_COLS[0], MASSE_P_COLS[MASSE_P_COLS.length - 1]!, rowIndex('p')))
+  segs.push(hTie(MASSE_P_COLS[0], MASSE_P_COLS.at(-1)!, rowIndex('p')))
   for (const col1 of MASSE_O_STUB_COLS) {
     segs.push(vTie(col1, rowIndex('o'), rowIndex('p')))
   }
 
   // Function-generator parallel outs (rows b–d).
-  segs.push(vTie(5, 1, 3))
-  segs.push(vTie(23, 1, 3))
+  segs.push(vTie(5, 1, 3), vTie(23, 1, 3))
 
   return segs
 }

@@ -9,28 +9,28 @@ const MODE_LABELS: Record<MachineMode, string> = {
 }
 
 interface ControlsProps {
-  machine: MachineState
-  selectedId: string | null
-  onMode: (mode: MachineMode) => void
-  onPower: (on: boolean) => void
-  onTimeScale: (v: number) => void
-  onReset: () => void
-  onAdd: (kind: 'potentiometer' | 'summer' | 'integrator' | 'inverter') => void
-  onLoadOscillator: () => void
-  onLoadVehicle: (damping: 'firm' | 'soft') => void
-  onLoadLorenz: () => void
-  onLoadRossler: () => void
-  onLoadVanDerPol: () => void
-  onLoadMathieu: () => void
-  onLoadDuffing: () => void
-  onSave: () => void
-  onLoad: () => void
-  onClear: () => void
-  onCoefficient: (id: string, k: number) => void
-  onIC: (id: string, v: number) => void
-  onSignal: (id: string, params: { amplitude?: number; frequency?: number }) => void
-  onDeleteSelected: () => void
-  activePreset?:
+  readonly machine: MachineState
+  readonly selectedId: string | null
+  readonly onMode: (mode: MachineMode) => void
+  readonly onPower: (on: boolean) => void
+  readonly onTimeScale: (v: number) => void
+  readonly onReset: () => void
+  readonly onAdd: (kind: 'potentiometer' | 'summer' | 'integrator' | 'inverter') => void
+  readonly onLoadOscillator: () => void
+  readonly onLoadVehicle: (damping: 'firm' | 'soft') => void
+  readonly onLoadLorenz: () => void
+  readonly onLoadRossler: () => void
+  readonly onLoadVanDerPol: () => void
+  readonly onLoadMathieu: () => void
+  readonly onLoadDuffing: () => void
+  readonly onSave: () => void
+  readonly onLoad: () => void
+  readonly onClear: () => void
+  readonly onCoefficient: (id: string, k: number) => void
+  readonly onIC: (id: string, v: number) => void
+  readonly onSignal: (id: string, params: { amplitude?: number; frequency?: number }) => void
+  readonly onDeleteSelected: () => void
+  readonly activePreset?:
     | 'oscillator'
     | 'vehicle-firm'
     | 'vehicle-soft'
@@ -40,7 +40,7 @@ interface ControlsProps {
     | 'mathieu'
     | 'duffing'
     | null
-  status?: string
+  readonly status?: string
 }
 
 export function Controls({

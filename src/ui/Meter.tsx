@@ -1,7 +1,7 @@
 interface MeterProps {
-  value: number
-  label: string
-  overloaded?: boolean
+  readonly value: number
+  readonly label: string
+  readonly overloaded?: boolean
 }
 
 /** Simple ±10 V analog-style meter. */
@@ -57,8 +57,8 @@ export function Meter({ value, label, overloaded }: MeterProps) {
 }
 
 interface ScopeProps {
-  samples: number[]
-  label: string
+  readonly samples: number[]
+  readonly label: string
 }
 
 export function Scope({ samples, label }: ScopeProps) {
