@@ -43,6 +43,7 @@ import {
   loadSoftSpringThreeBody,
   SOFT_SPRING_NODES,
 } from './presets/softSpringThreeBody'
+import { loadChuaCircuit, CHUA_NODES } from './presets/chuaCircuit'
 import { Controls } from './ui/Controls'
 import { FrontPanel } from './ui/FrontPanel'
 import { SchematicCanvas } from './ui/SchematicCanvas'
@@ -74,6 +75,7 @@ export default function App() {
     | 'mathieu'
     | 'duffing'
     | 'softSpring'
+    | 'chua'
     | null
   >('vehicle-firm')
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(() => {
@@ -299,6 +301,12 @@ export default function App() {
           setStatus(
             'Loaded soft-spring three-body — press Compute (Operate).',
           )
+        }}
+        onLoadChua={() => {
+          commitMachine(loadChuaCircuit())
+          setSelectedId(CHUA_NODES.x)
+          setActivePreset('chua')
+          setStatus('Loaded Chua’s circuit — press Compute (Operate).')
         }}
         onSave={handleSave}
         onLoad={handleLoadSaved}

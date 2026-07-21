@@ -6,6 +6,7 @@ import { VAN_DER_POL_SCOPE_CHANNELS } from '../presets/vanDerPol'
 import { MATHIEU_SCOPE_CHANNELS } from '../presets/mathieuEquation'
 import { DUFFING_SCOPE_CHANNELS } from '../presets/duffingOscillator'
 import { SOFT_SPRING_SCOPE_CHANNELS } from '../presets/softSpringThreeBody'
+import { CHUA_SCOPE_CHANNELS } from '../presets/chuaCircuit'
 
 export interface ScopeChannel {
   id: string
@@ -53,6 +54,7 @@ const SCOPE_MATCHERS: readonly {
   { a: 'mathieu_x', b: 'mathieu_v', channels: () => MATHIEU_SCOPE_CHANNELS },
   { a: 'duffing_x', b: 'duffing_v', channels: () => DUFFING_SCOPE_CHANNELS },
   { a: 'ss3_xA', b: 'ss3_yA', channels: () => SOFT_SPRING_SCOPE_CHANNELS },
+  { a: 'chua_x', b: 'chua_y', channels: () => CHUA_SCOPE_CHANNELS },
   { a: 'int_1', b: 'int_2', channels: () => OSCILLATOR_SCOPE_CHANNELS },
 ]
 
