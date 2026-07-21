@@ -37,6 +37,7 @@ Patches save to `localStorage` key `rat700-patch-v2`.
 - **Mathieu equation** — parametric pendulum ẍ + [a − 2q·cos 2t]x = 0 in a stable band; scope traces bounded precessing rings (x vs ẋ).
 - **Duffing oscillator** — forced double-well beam (β=−1, α=1, δ=0.25, γ=0.4, ω=1) that snaps between wells; scope shows the x–ẋ portrait.
 - **Soft-spring 3-body** — restricted soft triangle: two free masses + fixed third at the origin; linear A–B / A–C / B–C springs with cubic softening on A; scope shows body A's drifting x–y flower.
+- **Chua’s circuit** — double-scroll chaos (α=15.6, β=28, m₀=−1.143, m₁=−0.714) with three integrators and F1 programmed as the piecewise-linear Chua diode; scope shows the x–y double scroll.
 
 ## Engine (`src/engine/`)
 

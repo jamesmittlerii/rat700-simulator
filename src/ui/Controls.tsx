@@ -24,6 +24,7 @@ interface ControlsProps {
   readonly onLoadMathieu: () => void
   readonly onLoadDuffing: () => void
   readonly onLoadSoftSpring: () => void
+  readonly onLoadChua: () => void
   readonly onSave: () => void
   readonly onLoad: () => void
   readonly onClear: () => void
@@ -41,6 +42,7 @@ interface ControlsProps {
     | 'mathieu'
     | 'duffing'
     | 'softSpring'
+    | 'chua'
     | null
   readonly status?: string
 }
@@ -61,6 +63,7 @@ export function Controls({
   onLoadMathieu,
   onLoadDuffing,
   onLoadSoftSpring,
+  onLoadChua,
   onSave,
   onLoad,
   onClear,
@@ -220,6 +223,13 @@ export function Controls({
             onClick={onLoadSoftSpring}
           >
             Soft-spring 3-body
+          </button>
+          <button
+            type="button"
+            className={activePreset === 'chua' ? 'btn primary' : 'btn'}
+            onClick={onLoadChua}
+          >
+            Chua’s circuit
           </button>
           <button type="button" className="btn" onClick={onSave}>
             Save patch

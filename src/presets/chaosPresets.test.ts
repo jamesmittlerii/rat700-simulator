@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { setMode, stepMachine, type MachineState } from '../engine/circuit'
 import { countMultipliers } from '../engine/elements'
-import { OVERLOAD_THRESHOLD, portKey } from '../engine/types'
+import { MAX_FUNCTION_GENERATORS, OVERLOAD_THRESHOLD, portKey } from '../engine/types'
 import {
   loadRosslerAttractor,
   ROSSLER_SCOPE_CHANNELS,
@@ -16,6 +16,11 @@ import {
   loadSoftSpringThreeBody,
   SOFT_SPRING_SCOPE_CHANNELS,
 } from './softSpringThreeBody'
+import {
+  chuaDiode,
+  CHUA_SCOPE_CHANNELS,
+  loadChuaCircuit,
+} from './chuaCircuit'
 
 interface Trace {
   min: Record<string, number>
@@ -188,5 +193,69 @@ describe('Soft-spring three-body preset', () => {
   it('exposes an xA–yA scope channel', () => {
     expect(SOFT_SPRING_SCOPE_CHANNELS[0]?.xNode).toBe('ss3_xA')
     expect(SOFT_SPRING_SCOPE_CHANNELS[0]?.yNode).toBe('ss3_yA')
+  })
+})
+
+describe('Chua’s circuit preset', () => {
+  it('uses one function generator and no multipliers', () => {
+    const m = loadChuaCircuit()
+    const fgs = m.nodes.filter((n) => n.kind === 'functionGenerator')
+    // fromSnapshot fills empty F2, so two FG nodes exist; only F1 is patched.
+    expect(fgs.some((n) => n.id === 'fg_1')).toBe(true)
+    expect(fgs.length).toBeLessThanOrEqual(MAX_FUNCTION_GENERATORS)
+    expect(countMultipliers(m.nodes)).toBe(0)
+  })
+
+  it('programs F1 as the Chua diode g(Sx·v)', () => {
+    const m = loadChuaCircuit()
+    const fg = m.nodes.find((n) => n.id === 'fg_1')
+    expect(fg?.breakpoints?.length).toBeGreaterThan(2)
+    // Inner slope ≈ m0·Sx = −1.143·0.5 at small v; outer at v=4 → x=2.
+    const pts = fg!.breakpoints!
+    const near0 = pts.find((p) => Math.abs(p.x) < 0.01)
+    expect(near0?.y).toBeCloseTo(0, 5)
+    const at2 = pts.find((p) => Math.abs(p.x - 2) < 0.01)
+    expect(at2?.y).toBeCloseTo(chuaDiode(1), 5)
+  })
+
+  it('matches scaled Chua derivatives at the initial condition', () => {
+    let m = loadChuaCircuit()
+    m = setMode(m, 'operate')
+    const d = m.lastEval.derivatives
+    // Physical (0.1,0.1,0.1): ẋ=α(−g)=α·0.1143, ẏ=0.1, ż=−β·0.1
+    // Scaled by 1/Sx, 1/Sy, 1/Sz with Sx=Sz=0.5, Sy=0.05.
+    const g = chuaDiode(0.1)
+    expect(d['chua_x']).toBeCloseTo((15.6 * -g) / 0.5, 3)
+    expect(d['chua_y']).toBeCloseTo(0.1 / 0.05, 3)
+    expect(d['chua_z']).toBeCloseTo((-28 * 0.1) / 0.5, 3)
+  })
+
+  it('stays on a bounded double-scroll without overloading', () => {
+    const t = simulate(
+      loadChuaCircuit,
+      ['chua_x', 'chua_y', 'chua_z'],
+      12_000,
+      0.004,
+    )
+    const maxAbs = Math.max(
+      Math.abs(t.min['chua_x']!),
+      Math.abs(t.max['chua_x']!),
+      Math.abs(t.min['chua_y']!),
+      Math.abs(t.max['chua_y']!),
+      Math.abs(t.min['chua_z']!),
+      Math.abs(t.max['chua_z']!),
+    )
+    expect(Number.isFinite(maxAbs)).toBe(true)
+    expect(maxAbs).toBeLessThan(OVERLOAD_THRESHOLD)
+    expect(t.overloads).toBe(0)
+    // Double-scroll: x visits both lobes.
+    expect(t.max['chua_x']!).toBeGreaterThan(2)
+    expect(t.min['chua_x']!).toBeLessThan(-2)
+    expect(t.signChanges['chua_x']!).toBeGreaterThan(5)
+  }, 20_000)
+
+  it('exposes an x–y scope channel', () => {
+    expect(CHUA_SCOPE_CHANNELS[0]?.xNode).toBe('chua_x')
+    expect(CHUA_SCOPE_CHANNELS[0]?.yNode).toBe('chua_y')
   })
 })
