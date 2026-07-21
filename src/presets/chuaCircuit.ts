@@ -5,10 +5,10 @@ import {
   FG_KNOB_COUNT,
   toEquidistantBreakpoints,
 } from '../engine/functionGenerator'
-import type { Breakpoint, CircuitNode } from '../engine/types'
+import type { Breakpoint, Cable, CircuitNode } from '../engine/types'
 import {
   baseSnapshot,
-  cable as c,
+  cable,
   integratorNode,
   potK1,
   potK10,
@@ -44,17 +44,17 @@ import {
 const SX = 0.5
 const SY = 0.05
 const SZ = 0.5
-
 const ALPHA = 15.6
 const BETA = 28
 const M0 = -1.143
 const M1 = -0.714
 const TF = 10
 
-/** Physical IC near the attractor; scaled to volts. */
-const IC_X = 0.1 / SX
-const IC_Y = 0.1 / SY
-const IC_Z = 0.1 / SZ
+const STATE = {
+  x: { id: 'chua_x', ic: 0.1 / SX, y: 80 },
+  y: { id: 'chua_y', ic: 0.1 / SY, y: 260 },
+  z: { id: 'chua_z', ic: 0.1 / SZ, y: 440 },
+} as const
 
 /** Classic 3-segment Chua diode (breakpoint at ±1). */
 export function chuaDiode(x: number): number {
@@ -70,79 +70,120 @@ export function chuaDiodeBreakpoints(): Breakpoint[] {
   return toEquidistantBreakpoints(raw)
 }
 
+type PotSpec = {
+  readonly id: string
+  readonly label: string
+  readonly y: number
+  readonly k: number
+}
+
+type Link = {
+  readonly from: string
+  readonly fromPort: string
+  readonly to: string
+  readonly toPort: string
+}
+
+function potNodes(specs: readonly PotSpec[]): CircuitNode[] {
+  return specs.map((p) =>
+    createNode('potentiometer', p.id, p.label, 500, p.y, {
+      coefficient: p.k,
+    }),
+  )
+}
+
+function wire(links: readonly Link[]): Cable[] {
+  return links.map((l, i) => cable(i + 1, l.from, l.fromPort, l.to, l.toPort))
+}
+
+function stateIntegrators(): CircuitNode[] {
+  return (['x', 'y', 'z'] as const).map((axis) => {
+    const s = STATE[axis]
+    return integratorNode(s.id, `Int ${axis}`, 360, s.y, s.ic, {
+      timeFactor: TF,
+    })
+  })
+}
+
+function stateInverters(): CircuitNode[] {
+  return (['x', 'y', 'z'] as const).map((axis) => {
+    const s = STATE[axis]
+    return createNode('inverter', `inv_${axis}`, `−${axis}`, 600, s.y)
+  })
+}
+
+/** Coefficient pots for the scaled Chua equations. */
+function chuaPots(): CircuitNode[] {
+  return potNodes([
+    {
+      id: 'pot_xy',
+      label: 'α·Sy/Sx (y→x)',
+      y: 140,
+      k: potK1(ALPHA * (SY / SX), TF),
+    },
+    { id: 'pot_xdamp', label: 'α (x decay)', y: 80, k: potK10(ALPHA, TF) },
+    {
+      id: 'pot_xg',
+      label: 'α/Sx (g→x)',
+      y: 200,
+      k: potK10(ALPHA / SX, TF),
+    },
+    { id: 'pot_yx', label: 'Sx/Sy (x→y)', y: 280, k: potK1(SX / SY, TF) },
+    { id: 'pot_ydamp', label: '1 (y decay)', y: 320, k: potK1(1, TF) },
+    { id: 'pot_yz', label: 'Sz/Sy (z→y)', y: 360, k: potK1(SZ / SY, TF) },
+    {
+      id: 'pot_zy',
+      label: 'β·Sy/Sz (y→z)',
+      y: 460,
+      k: potK1(BETA * (SY / SZ), TF),
+    },
+  ])
+}
+
+/**
+ * Patch graph:
+ *   x → F1(g) → pot_xg → ∫x;  −y → pot_xy → ∫x;  x → pot_xdamp → ∫x
+ *   −x → pot_yx → ∫y;  y → pot_ydamp → ∫y;  −z → pot_yz → ∫y
+ *   y → pot_zy → ∫z
+ */
+function chuaLinks(): Link[] {
+  const { x, y, z } = STATE
+  return [
+    { from: x.id, fromPort: 'out', to: 'inv_x', toPort: 'in' },
+    { from: y.id, fromPort: 'out', to: 'inv_y', toPort: 'in' },
+    { from: z.id, fromPort: 'out', to: 'inv_z', toPort: 'in' },
+    { from: x.id, fromPort: 'out', to: 'fg_1', toPort: 'in' },
+
+    { from: x.id, fromPort: 'out', to: 'pot_xdamp', toPort: 'in' },
+    { from: 'pot_xdamp', fromPort: 'out', to: x.id, toPort: 'in3' },
+    { from: 'inv_y', fromPort: 'out', to: 'pot_xy', toPort: 'in' },
+    { from: 'pot_xy', fromPort: 'out', to: x.id, toPort: 'in0' },
+    { from: 'fg_1', fromPort: 'out', to: 'pot_xg', toPort: 'in' },
+    { from: 'pot_xg', fromPort: 'out', to: x.id, toPort: 'in4' },
+
+    { from: 'inv_x', fromPort: 'out', to: 'pot_yx', toPort: 'in' },
+    { from: 'pot_yx', fromPort: 'out', to: y.id, toPort: 'in0' },
+    { from: y.id, fromPort: 'out', to: 'pot_ydamp', toPort: 'in' },
+    { from: 'pot_ydamp', fromPort: 'out', to: y.id, toPort: 'in1' },
+    { from: 'inv_z', fromPort: 'out', to: 'pot_yz', toPort: 'in' },
+    { from: 'pot_yz', fromPort: 'out', to: y.id, toPort: 'in2' },
+
+    { from: y.id, fromPort: 'out', to: 'pot_zy', toPort: 'in' },
+    { from: 'pot_zy', fromPort: 'out', to: z.id, toPort: 'in0' },
+  ]
+}
+
 export function chuaCircuitSnapshot() {
   const nodes: CircuitNode[] = [
     ...referenceNodes(),
-
-    integratorNode('chua_x', 'Int x', 360, 80, IC_X, { timeFactor: TF }),
-    integratorNode('chua_y', 'Int y', 360, 260, IC_Y, { timeFactor: TF }),
-    integratorNode('chua_z', 'Int z', 360, 440, IC_Z, { timeFactor: TF }),
-
-    createNode('inverter', 'inv_x', '−x', 600, 80),
-    createNode('inverter', 'inv_y', '−y', 600, 200),
-    createNode('inverter', 'inv_z', '−z', 600, 440),
-
-    // F1 — piecewise-linear Chua diode (faceplate knobs)
+    ...stateIntegrators(),
+    ...stateInverters(),
     createNode('functionGenerator', 'fg_1', 'Chua diode g(x)', 200, 80, {
       breakpoints: chuaDiodeBreakpoints(),
     }),
-
-    // v̇X = 1.56·vY − 15.6·vX − 31.2·FG
-    createNode('potentiometer', 'pot_xy', 'α·Sy/Sx (y→x)', 500, 140, {
-      coefficient: potK1(ALPHA * (SY / SX), TF),
-    }),
-    createNode('potentiometer', 'pot_xdamp', 'α (x decay)', 500, 80, {
-      coefficient: potK10(ALPHA, TF),
-    }),
-    createNode('potentiometer', 'pot_xg', 'α/Sx (g→x)', 500, 200, {
-      coefficient: potK10(ALPHA / SX, TF),
-    }),
-
-    // v̇Y = 10·vX − vY + 10·vZ
-    createNode('potentiometer', 'pot_yx', 'Sx/Sy (x→y)', 500, 280, {
-      coefficient: potK1(SX / SY, TF),
-    }),
-    createNode('potentiometer', 'pot_ydamp', '1 (y decay)', 500, 320, {
-      coefficient: potK1(1, TF),
-    }),
-    createNode('potentiometer', 'pot_yz', 'Sz/Sy (z→y)', 500, 360, {
-      coefficient: potK1(SZ / SY, TF),
-    }),
-
-    // v̇Z = −2.8·vY
-    createNode('potentiometer', 'pot_zy', 'β·Sy/Sz (y→z)', 500, 460, {
-      coefficient: potK1(BETA * (SY / SZ), TF),
-    }),
+    ...chuaPots(),
   ]
-
-  const cables = [
-    c(1, 'chua_x', 'out', 'inv_x', 'in'),
-    c(2, 'chua_y', 'out', 'inv_y', 'in'),
-    c(3, 'chua_z', 'out', 'inv_z', 'in'),
-    c(4, 'chua_x', 'out', 'fg_1', 'in'),
-
-    // v̇X: −α·vX (self), +α·Sy/Sx·vY via −vY, −(α/Sx)·g via +FG
-    c(5, 'chua_x', 'out', 'pot_xdamp', 'in'),
-    c(6, 'pot_xdamp', 'out', 'chua_x', 'in3'),
-    c(7, 'inv_y', 'out', 'pot_xy', 'in'),
-    c(8, 'pot_xy', 'out', 'chua_x', 'in0'),
-    c(9, 'fg_1', 'out', 'pot_xg', 'in'),
-    c(10, 'pot_xg', 'out', 'chua_x', 'in4'),
-
-    // v̇Y: +10·vX via −vX, −vY self-decay, +10·vZ via −vZ
-    c(11, 'inv_x', 'out', 'pot_yx', 'in'),
-    c(12, 'pot_yx', 'out', 'chua_y', 'in0'),
-    c(13, 'chua_y', 'out', 'pot_ydamp', 'in'),
-    c(14, 'pot_ydamp', 'out', 'chua_y', 'in1'),
-    c(15, 'inv_z', 'out', 'pot_yz', 'in'),
-    c(16, 'pot_yz', 'out', 'chua_y', 'in2'),
-
-    // v̇Z: −β·Sy/Sz·vY
-    c(17, 'chua_y', 'out', 'pot_zy', 'in'),
-    c(18, 'pot_zy', 'out', 'chua_z', 'in0'),
-  ]
-
-  return baseSnapshot(nodes, cables, { timeScale: 1.5 })
+  return baseSnapshot(nodes, wire(chuaLinks()), { timeScale: 1.5 })
 }
 
 export function loadChuaCircuit() {
@@ -150,9 +191,9 @@ export function loadChuaCircuit() {
 }
 
 export const CHUA_NODES = {
-  x: 'chua_x',
-  y: 'chua_y',
-  z: 'chua_z',
+  x: STATE.x.id,
+  y: STATE.y.id,
+  z: STATE.z.id,
   fg: 'fg_1',
 } as const
 
@@ -162,8 +203,8 @@ export const CHUA_SCOPE_CHANNELS = [
     id: 'chuaXY',
     label: 'Chua · x–y',
     title: 'X/Y scope — Chua’s circuit (x–y double scroll)',
-    xNode: 'chua_x',
-    yNode: 'chua_y',
+    xNode: STATE.x.id,
+    yNode: STATE.y.id,
     xScale: 1.4,
     yScale: 1.1,
     persistSec: 8,
