@@ -1,6 +1,7 @@
 import { createNode } from '../engine/elements'
 import { fromSnapshot } from '../engine/circuit'
-import type { CircuitNode } from '../engine/types'
+import { defaultJumpers, upsertJumper } from '../engine/jumpers'
+import type { CircuitNode, JumperPlacement } from '../engine/types'
 import {
   baseSnapshot,
   cable as c,
@@ -36,6 +37,9 @@ import {
  *     factor on all three integrators preserves the attractor's time scale.
  *   - Two quarter-square multipliers form the x·z and x·y products.
  *
+ * Faceplate: Int x/y/z on switchable amps 01, 02, 05 (slots 0,1,4) with
+ * ∫ + time×10 jumpers; inverters on amps 03, 04, 06 (Σ).
+ *
  * Butterfly is displayed as the x–z projection on the X/Y scope.
  */
 
@@ -56,16 +60,26 @@ const IC_Y = 1 / SY
 const IC_Z = 1 / SZ
 
 export function lorenzAttractorSnapshot() {
+  // Computing-amp order = faceplate strip order (amp 01…06). Integrators
+  // sit on switchable slots 0,1,4 so the 4-pin blocks can show ∫.
   const nodes: CircuitNode[] = [
     ...referenceNodes(),
 
-    integratorNode('lorenz_x', 'Int x', 360, 80, IC_X, { timeFactor: TF }),
-    integratorNode('lorenz_y', 'Int y', 360, 260, IC_Y, { timeFactor: TF }),
-    integratorNode('lorenz_z', 'Int z', 360, 440, IC_Z, { timeFactor: TF }),
-
-    createNode('inverter', 'inv_x', '−x', 600, 80),
-    createNode('inverter', 'inv_y', '−y', 600, 20),
-    createNode('inverter', 'inv_mxz', '+xz', 600, 360),
+    integratorNode('lorenz_x', 'Int x', 360, 80, IC_X, {
+      timeFactor: TF,
+      ampSlot: 0,
+    }),
+    integratorNode('lorenz_y', 'Int y', 360, 260, IC_Y, {
+      timeFactor: TF,
+      ampSlot: 1,
+    }),
+    createNode('inverter', 'inv_x', '−x', 600, 80, { ampSlot: 2 }),
+    createNode('inverter', 'inv_y', '−y', 600, 20, { ampSlot: 3 }),
+    integratorNode('lorenz_z', 'Int z', 360, 440, IC_Z, {
+      timeFactor: TF,
+      ampSlot: 4,
+    }),
+    createNode('inverter', 'inv_mxz', '+xz', 600, 360, { ampSlot: 5 }),
 
     createNode('multiplier', 'mult_xz', 'x·z', 200, 360),
     createNode('multiplier', 'mult_xy', 'x·y', 200, 520),
@@ -125,7 +139,23 @@ export function lorenzAttractorSnapshot() {
     c(20, 'pot_zdamp', 'out', 'lorenz_z', 'in0'),
   ]
 
-  return baseSnapshot(nodes, cables)
+  let jumpers: JumperPlacement[] = defaultJumpers()
+  for (const slot of [0, 1, 4]) {
+    jumpers = upsertJumper(jumpers, {
+      id: `jmode_${slot}`,
+      kind: 'mode4',
+      ampSlot: slot,
+      position: 'integral',
+    })
+    jumpers = upsertJumper(jumpers, {
+      id: `jtime_${slot}`,
+      kind: 'time2',
+      ampSlot: slot,
+      position: '10',
+    })
+  }
+
+  return baseSnapshot(nodes, cables, { jumpers })
 }
 
 export function loadLorenzAttractor() {

@@ -37,6 +37,22 @@ export const OSCILLATOR_SCOPE_CHANNELS: ScopeChannel[] = [
   { id: 'orbit', label: 'x–y', xNode: 'int_1', yNode: 'int_2' },
 ]
 
+/** Lorenz 2 — kept here to avoid preset↔channels import cycles. */
+export const LORENZ2_SCOPE_CHANNELS: ScopeChannel[] = [
+  {
+    id: 'lorenz2XZ',
+    label: 'Lorenz 2 · x–z',
+    title: 'X/Y scope — Lorenz attractor 2 (x–z butterfly)',
+    xNode: 'lorenz2_x',
+    yNode: 'lorenz2_z',
+    xScale: 2.5,
+    yScale: 2.5,
+    // Mean vZ ≈ 2.4 with S = 10.
+    yOffset: -2.5,
+    persistSec: 8,
+  },
+]
+
 /**
  * First matching pair of node ids wins. Order matters: vehicle figure
  * generator before chaos / oscillator orbits. Channels are resolved via
@@ -49,6 +65,7 @@ const SCOPE_MATCHERS: readonly {
 }[] = [
   { a: 'sum_xL', b: 'sum_yw', channels: () => VEHICLE_SCOPE_CHANNELS },
   { a: 'lorenz_x', b: 'lorenz_z', channels: () => LORENZ_SCOPE_CHANNELS },
+  { a: 'lorenz2_x', b: 'lorenz2_z', channels: () => LORENZ2_SCOPE_CHANNELS },
   { a: 'ross_x', b: 'ross_y', channels: () => ROSSLER_SCOPE_CHANNELS },
   { a: 'vdp_x', b: 'vdp_v', channels: () => VAN_DER_POL_SCOPE_CHANNELS },
   { a: 'mathieu_x', b: 'mathieu_v', channels: () => MATHIEU_SCOPE_CHANNELS },

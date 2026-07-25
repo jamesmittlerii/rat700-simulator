@@ -3,7 +3,8 @@
  */
 
 import { portsFor } from '../engine/elements'
-import type { CircuitNode, PortDef, PortDirection, PortRef } from '../engine/types'
+import type { Cable, CircuitNode, PortDef, PortDirection, PortRef } from '../engine/types'
+import { portKey } from '../engine/types'
 import {
   AMP_SLOTS,
   AMP_STRIPS,
@@ -26,6 +27,7 @@ import {
   ampTrayRows,
   freeDiodeLabel,
   isFreeDiodeCell,
+  isSwitchableAmp,
   jackId,
   rowIndex,
   rowLetter,
@@ -218,21 +220,16 @@ function fillBlankSilk(place: PlaceFn): void {
 function placeConfigSilk(place: PlaceFn): void {
   // Config silk a–d on switchable pairs.
   // Σ / ∫ are drawn once centered over the 4-jack mode blocks (not per jack).
+  // Capacitor silk: '1' sits between d1–d2 and '10' between d2–e2 (FrontPanel overlay).
   for (const block of SWITCHABLE_BLOCKS) {
-    const [leftCol, rightCol] = block.cols
     for (const col1 of block.cols) {
       place(cell(col1, 0, 'white', `Σ ${block.amp}`))
       place(cell(col1, 1, 'white', `Σ/∫ ${block.amp}`))
       place(cell(col1, 2, 'white', `∫ ${block.amp}`))
+      // Row d: white capacitor jacks — no per-hole 1/10 marks (museum silk is centered).
+      place(cell(col1, 3, 'white', `C ${block.amp}`))
     }
-    // Row d: capacitor selector pair (horizontal 1 / 10 short).
-    place(cell(leftCol, 3, 'white', `1 ${block.amp}`, undefined, undefined, { mark: '1' }))
-    place(cell(rightCol, 3, 'white', `10 ${block.amp}`, undefined, undefined, { mark: '10' }))
   }
-}
-
-function outMultColorForRow(row: number): JackColor {
-  return row === 4 || row === 5 ? 'white' : 'orange'
 }
 
 function placeAmpStripSilk(
@@ -249,6 +246,7 @@ function placeAmpStripSilk(
     8: '10',
     9: 'S',
   }
+  // e–f: green|white. On Σ/∫ strips, e2 is the ×10 capacitor jack and f2 is A (IC).
   for (const row of [4, 5]) {
     place(
       cell(leftCol, row, 'green', `${tag} silk ×1`, undefined, undefined, {
@@ -256,12 +254,22 @@ function placeAmpStripSilk(
         ampNumber: strip.amp,
       }),
     )
+    const rightMark =
+      strip.switchable && row === rowIndex('f') ? 'A' : undefined
+    const rightLabel =
+      strip.switchable && row === rowIndex('e')
+        ? `${tag} C×10`
+        : strip.switchable && row === rowIndex('f')
+          ? `${tag} A`
+          : `${tag} silk`
     place(
-      cell(rightCol, row, 'white', `${tag} silk out`, undefined, undefined, {
+      cell(rightCol, row, 'white', rightLabel, undefined, undefined, {
         ampNumber: strip.amp,
+        mark: rightMark,
       }),
     )
   }
+  // g–k: green|orange paralleled amp outs on the right column.
   for (const row of [6, 7, 8, 9]) {
     place(
       cell(leftCol, row, 'green', `${tag} silk`, undefined, undefined, {
@@ -292,20 +300,13 @@ function placeAmpOutputMults(
   outRef: PortRef,
   ampNumber: number,
 ): void {
-  // Right column of the input band = paralleled amp-output mults.
-  // Amp number is silk between k/l (not on the jacks).
-  const inputRows = ampInputPlan(ampNumber).map((s) => s.row)
-  for (const row of inputRows) {
+  // Paralleled amp outs: g–k only (museum vertical silk tie).
+  // On Σ/∫ strips e2 is the ×10 capacitor jack and f2 is A — not outs.
+  for (const row of [rowIndex('g'), rowIndex('h'), rowIndex('i'), rowIndex('k')]) {
     place(
-      cell(
-        rightCol,
-        row,
-        outMultColorForRow(row),
-        `${tag} Out`,
-        outRef,
-        'out',
-        { ampNumber },
-      ),
+      cell(rightCol, row, 'orange', `${tag} Out`, outRef, 'out', {
+        ampNumber,
+      }),
     )
   }
 }
@@ -383,6 +384,16 @@ type AmpStripCtx = {
 function placeIntegratorTray(ctx: AmpStripCtx): void {
   const { place, amp, leftCol, rightCol, tag, ampNumber } = ctx
   const icRef = { nodeId: amp.id, port: 'ic' }
+  // Σ/∫ strips: IC is f2 (museum 'A'), not the pot-tray row.
+  if (isSwitchableAmp(ampNumber)) {
+    place(
+      cell(rightCol, rowIndex('f'), 'white', `${tag} A`, icRef, 'in', {
+        ampNumber,
+        mark: 'A',
+      }),
+    )
+    return
+  }
   const aRow = rowIndex('l')
   if (!isFreeDiodeCell(leftCol, aRow)) {
     place(
@@ -464,7 +475,7 @@ function placeAmpTrayOuts(
 ): void {
   // Tray row m: paralleled red outs when the cell is not a pot wiper column.
   // Pot sections share cols with amp strips; wipers keep row m there.
-  // Amp-output mults remain on the right-column e–k / g–k band.
+  // Amp-output mults remain on the right-column g–k band.
   if (tray.split) return
   const { place, leftCol, rightCol, tag, ampNumber } = ctx
   for (const col1 of [leftCol, rightCol]) {
@@ -481,8 +492,8 @@ function placeAmpTrayOuts(
 /**
  * Amplifiers — museum + manual §3.7.1:
  * Left column = dark green gain inputs (independent; not left↔right commoned).
- * Right column = paralleled amp outputs (white e–f / orange g–k on photo;
- * red on tray row m). Switchable: e–k inputs. Summer-only: g–k inputs.
+ * Right column = paralleled orange outs on g–k. On Σ/∫ strips, e2 is the ×10
+ * capacitor jack and f2 is A (IC). Summer-only: g–k inputs; switchable: e–k inputs.
  */
 function placeSlottedAmp(
   place: PlaceFn,
@@ -1167,9 +1178,58 @@ export function findPortCell(
   cells: PatchCell[],
   ref: PortRef,
 ): PatchCell | undefined {
-  return cells.find(
-    (c) => c.ref?.nodeId === ref.nodeId && c.ref.port === ref.port,
-  )
+  return findPortCells(cells, ref)[0]
+}
+
+/** All live jacks for a port, top-to-bottom then left-to-right. */
+export function findPortCells(cells: PatchCell[], ref: PortRef): PatchCell[] {
+  return cells
+    .filter((c) => c.ref?.nodeId === ref.nodeId && c.ref.port === ref.port)
+    .sort((a, b) => a.row - b.row || a.col - b.col)
+}
+
+export type CableJackEndpoints = {
+  cableId: string
+  from: PatchCell
+  to: PatchCell
+}
+
+/**
+ * Place each cable end on a distinct paralleled jack when a port has several
+ * (e.g. amp outs g–k). Extra cables wrap after the jack list is exhausted.
+ */
+export function assignCableEndpoints(
+  cells: PatchCell[],
+  cables: readonly Cable[],
+): CableJackEndpoints[] {
+  const byPort = new Map<string, PatchCell[]>()
+  for (const c of cells) {
+    if (!c.ref) continue
+    const k = portKey(c.ref)
+    const list = byPort.get(k)
+    if (list) list.push(c)
+    else byPort.set(k, [c])
+  }
+  for (const list of byPort.values()) {
+    list.sort((a, b) => a.row - b.row || a.col - b.col)
+  }
+  const nextIndex = new Map<string, number>()
+  const pick = (ref: PortRef): PatchCell | undefined => {
+    const k = portKey(ref)
+    const list = byPort.get(k)
+    if (!list?.length) return undefined
+    const i = nextIndex.get(k) ?? 0
+    nextIndex.set(k, i + 1)
+    return list[i % list.length]!
+  }
+  const out: CableJackEndpoints[] = []
+  for (const cable of cables) {
+    const from = pick(cable.from)
+    const to = pick(cable.to)
+    if (!from || !to) continue
+    out.push({ cableId: cable.id, from, to })
+  }
+  return out
 }
 
 export function portDefFor(
@@ -1188,8 +1248,8 @@ export function jumperRowSpan(
   if (kind === 'mode4') {
     return position === 'integral' ? ['b', 'c'] : ['a', 'b']
   }
-  // Capacitor short: horizontal pair on row d (same holes for 1 and 10).
-  return ['d', 'd']
+  // Capacitor: '1' = d1–d2 (horizontal); '10' = d2–e2 (vertical).
+  return position === '10' ? ['d', 'e'] : ['d', 'd']
 }
 
 /** Jacks occupied by a jumper placement (1-based cols, 0-based rows). */
@@ -1199,18 +1259,25 @@ export function jumperOccupiedJacks(
   leftCol1: number,
   rightCol1: number,
 ): { col1: number; row: number }[] {
-  const [r0, r1] = jumperRowSpan(kind, position)
-  const rows = [...new Set([rowIndex(r0), rowIndex(r1)])]
   if (kind === 'mode4') {
+    const [r0, r1] = jumperRowSpan(kind, position)
+    const rows = [...new Set([rowIndex(r0), rowIndex(r1)])]
     const out: { col1: number; row: number }[] = []
     for (const row of rows) {
       out.push({ col1: leftCol1, row }, { col1: rightCol1, row })
     }
     return out
   }
-  // time2: horizontal short across both strip columns on row d
-  return rows.flatMap((row) => [
-    { col1: leftCol1, row },
-    { col1: rightCol1, row },
-  ])
+  if (position === '10') {
+    // Vertical short on the right column: d2–e2.
+    return [
+      { col1: rightCol1, row: rowIndex('d') },
+      { col1: rightCol1, row: rowIndex('e') },
+    ]
+  }
+  // Horizontal short across both strip columns on row d.
+  return [
+    { col1: leftCol1, row: rowIndex('d') },
+    { col1: rightCol1, row: rowIndex('d') },
+  ]
 }

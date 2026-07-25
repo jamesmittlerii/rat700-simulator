@@ -19,6 +19,7 @@ interface ControlsProps {
   readonly onLoadOscillator: () => void
   readonly onLoadVehicle: (damping: 'firm' | 'soft') => void
   readonly onLoadLorenz: () => void
+  readonly onLoadLorenz2: () => void
   readonly onLoadRossler: () => void
   readonly onLoadVanDerPol: () => void
   readonly onLoadMathieu: () => void
@@ -37,6 +38,7 @@ interface ControlsProps {
     | 'vehicle-firm'
     | 'vehicle-soft'
     | 'lorenz'
+    | 'lorenz2'
     | 'rossler'
     | 'vanDerPol'
     | 'mathieu'
@@ -58,6 +60,7 @@ export function Controls({
   onLoadOscillator,
   onLoadVehicle,
   onLoadLorenz,
+  onLoadLorenz2,
   onLoadRossler,
   onLoadVanDerPol,
   onLoadMathieu,
@@ -188,6 +191,13 @@ export function Controls({
             onClick={onLoadLorenz}
           >
             Lorenz attractor
+          </button>
+          <button
+            type="button"
+            className={activePreset === 'lorenz2' ? 'btn primary' : 'btn'}
+            onClick={onLoadLorenz2}
+          >
+            Lorenz attractor 2
           </button>
           <button
             type="button"

@@ -35,6 +35,10 @@ import {
   VEHICLE_NODES,
 } from './presets/vehicleSuspension'
 import { loadLorenzAttractor, LORENZ_NODES } from './presets/lorenzAttractor'
+import {
+  loadLorenzAttractor2,
+  LORENZ2_NODES,
+} from './presets/lorenzAttractor2'
 import { loadRosslerAttractor, ROSSLER_NODES } from './presets/rosslerAttractor'
 import { loadVanDerPol, VAN_DER_POL_NODES } from './presets/vanDerPol'
 import { loadMathieuEquation, MATHIEU_NODES } from './presets/mathieuEquation'
@@ -70,6 +74,7 @@ export default function App() {
     | 'vehicle-firm'
     | 'vehicle-soft'
     | 'lorenz'
+    | 'lorenz2'
     | 'rossler'
     | 'vanDerPol'
     | 'mathieu'
@@ -269,6 +274,12 @@ export default function App() {
           setSelectedId(LORENZ_NODES.x)
           setActivePreset('lorenz')
           setStatus('Loaded Lorenz attractor preset — press Compute (Operate).')
+        }}
+        onLoadLorenz2={() => {
+          commitMachine(setPanelButton(loadLorenzAttractor2(), 'dauer'))
+          setSelectedId(LORENZ2_NODES.x)
+          setActivePreset('lorenz2')
+          setStatus('Loaded Lorenz attractor 2 — computing.')
         }}
         onLoadRossler={() => {
           commitMachine(loadRosslerAttractor())

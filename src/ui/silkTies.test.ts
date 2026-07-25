@@ -151,6 +151,21 @@ describe('silk ties', () => {
     expect(
       boxes.some((b) => b.x === 0 && b.w === 2 && b.h === 10),
     ).toBe(true)
+    // Summer-only 07 = cols 13–14, rows e–k (2×6), not a shared e–f band.
+    expect(
+      boxes.some(
+        (b) =>
+          b.x === 12 &&
+          b.w === 2 &&
+          b.y === rowIndex('e') &&
+          b.h === 6,
+      ),
+    ).toBe(true)
+    expect(
+      boxes.filter(
+        (b) => b.y === rowIndex('e') && b.h === 6 && b.w === 2,
+      ).length,
+    ).toBe(SUMMER_ONLY_BLOCKS.length)
     // Bottom-left ME + AS + verfügbar.
     expect(boxes.some((b) => b.x === 1 && b.w === 3 && b.y === 12 && b.h === 2)).toBe(
       true,

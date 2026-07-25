@@ -38,6 +38,7 @@ import {
   POT_SLOTS,
   ROW_LETTERS,
   SWITCHABLE_LEFT_COLS,
+  assignCableEndpoints,
   buildPatchLayout,
   findPortCell,
   isLegalModeJumper,
@@ -534,6 +535,7 @@ function PatchBay({
   const silkSections = useMemo(() => buildSilkSectionLines(), [])
   const bayRef = useRef<HTMLDivElement>(null)
   const [dragFrom, setDragFrom] = useState<PortRef | null>(null)
+  const [dragFromJack, setDragFromJack] = useState<PatchCell | null>(null)
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
   const [hoverCable, setHoverCable] = useState<string | null>(null)
   const [menu, setMenu] = useState<{
@@ -543,14 +545,20 @@ function PatchBay({
   } | null>(null)
   const [jumperTool, setJumperTool] = useState<'mode4' | 'time2' | null>(null)
 
-  const connectedKeys = useMemo(() => {
+  const cableEnds = useMemo(
+    () => assignCableEndpoints(cells, machine.cables),
+    [cells, machine.cables],
+  )
+
+  /** Jack cells that actually host a cable end (paralleled outs light individually). */
+  const connectedJacks = useMemo(() => {
     const set = new Set<string>()
-    for (const c of machine.cables) {
-      set.add(portKey(c.from))
-      set.add(portKey(c.to))
+    for (const e of cableEnds) {
+      set.add(`${e.from.col},${e.from.row}`)
+      set.add(`${e.to.col},${e.to.row}`)
     }
     return set
-  }, [machine.cables])
+  }, [cableEnds])
 
   const toGrid = useCallback((e: ReactPointerEvent | PointerEvent) => {
     const el = bayRef.current
@@ -568,6 +576,7 @@ function PatchBay({
     onSelect(c.ref.nodeId)
     if (c.direction === 'out') {
       setDragFrom(c.ref)
+      setDragFromJack(c)
       setCursor(toGrid(e))
       ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
     }
@@ -588,6 +597,7 @@ function PatchBay({
       onConnect(dragFrom, target.ref)
     }
     setDragFrom(null)
+    setDragFromJack(null)
     setCursor(null)
   }
 
@@ -773,6 +783,8 @@ function PatchBay({
             const a = rowIndex('a')
             const b = rowIndex('b')
             const c = rowIndex('c')
+            const d = rowIndex('d')
+            const e = rowIndex('e')
             return (
               <Fragment key={`mode-silk-${block.amp}`}>
                 <span
@@ -792,6 +804,25 @@ function PatchBay({
                   }}
                 >
                   ∫
+                </span>
+                {/* Capacitor silk: 1 between d1–d2 (high); 10 between d2–e2 */}
+                <span
+                  className="fp-cap-silk-1"
+                  style={{
+                    gridColumn: `${left} / ${right + 1}`,
+                    gridRow: d + 1,
+                  }}
+                >
+                  1
+                </span>
+                <span
+                  className="fp-cap-silk-10"
+                  style={{
+                    gridColumn: right,
+                    gridRow: `${d + 1} / ${e + 2}`,
+                  }}
+                >
+                  10
                 </span>
               </Fragment>
             )
@@ -837,14 +868,13 @@ function PatchBay({
           preserveAspectRatio="none"
           aria-hidden
         >
-          {machine.cables.map((cable) => {
-            const a = findPortCell(cells, cable.from)
-            const b = findPortCell(cells, cable.to)
-            if (!a || !b) return null
-            const x1 = a.col + 0.5
-            const y1 = a.row + 0.5
-            const x2 = b.col + 0.5
-            const y2 = b.row + 0.5
+          {cableEnds.map((end) => {
+            const cable = machine.cables.find((c) => c.id === end.cableId)
+            if (!cable) return null
+            const x1 = end.from.col + 0.5
+            const y1 = end.from.row + 0.5
+            const x2 = end.to.col + 0.5
+            const y2 = end.to.row + 0.5
             const mx = (x1 + x2) / 2
             const stroke = cable.color ?? '#c45c26'
             const hot = hoverCable === cable.id
@@ -870,22 +900,23 @@ function PatchBay({
             )
           })}
           {/* Jumper blocks — mode4 is a 4-pin Umschaltstecker spanning both
-              strip columns × two rows (a–b or b–c). time2 is a horizontal
-              2-pin capacitor short on row d (same holes for 1 and 10). */}
+              strip columns × two rows (a–b or b–c). time2: '1' = horizontal
+              d1–d2; '10' = vertical d2–e2. */}
           {machine.jumpers.map((j) => {
             const block = SWITCHABLE_BLOCKS.find((b) => b.ampSlot === j.ampSlot)
             if (!block) return null
             const [r0, r1] = jumperRowSpan(j.kind, j.position)
             const row0 = ROW_LETTERS.indexOf(r0)
             const row1 = ROW_LETTERS.indexOf(r1)
-            const col = block.cols[0] - 1
+            const left = block.cols[0] - 1
+            const right = block.cols[1] - 1
             const y = Math.min(row0, row1)
             const h = Math.max(1, Math.abs(row1 - row0) + 1)
             if (j.kind === 'mode4') {
               return (
                 <rect
                   key={j.id}
-                  x={col + 0.12}
+                  x={left + 0.12}
                   y={y + 0.12}
                   width={1.76}
                   height={h - 0.24}
@@ -894,11 +925,25 @@ function PatchBay({
                 />
               )
             }
+            if (j.position === '10') {
+              // Vertical 2-pin on the right column: d2–e2.
+              return (
+                <rect
+                  key={j.id}
+                  x={right + 0.28}
+                  y={y + 0.12}
+                  width={0.44}
+                  height={h - 0.24}
+                  rx={0.1}
+                  className="fp-jumper-block kind-time2"
+                />
+              )
+            }
             // Horizontal 2-pin on row d across both strip columns.
             return (
               <rect
                 key={j.id}
-                x={col + 0.12}
+                x={left + 0.12}
                 y={y + 0.28}
                 width={1.76}
                 height={0.44}
@@ -910,7 +955,7 @@ function PatchBay({
           {dragFrom &&
             cursor &&
             (() => {
-              const a = findPortCell(cells, dragFrom)
+              const a = dragFromJack ?? findPortCell(cells, dragFrom)
               if (!a) return null
               const x1 = a.col + 0.5
               const y1 = a.row + 0.5
@@ -929,7 +974,7 @@ function PatchBay({
         {cells.map((c) => {
           const live = !!c.ref && !c.unused
           const key = c.ref ? portKey(c.ref) : `${c.col},${c.row}`
-          const lit = live && connectedKeys.has(key)
+          const lit = live && connectedJacks.has(`${c.col},${c.row}`)
           const selected = live && c.ref?.nodeId === selectedId
           const leftCol1 = c.col + 1
           const jumperTarget =

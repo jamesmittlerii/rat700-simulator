@@ -236,10 +236,11 @@ export function buildSilkSections(): SilkRect[] {
     boxes.push(sectionBox(c0, c1, 'a', 'k'))
   }
 
-  // Summer-only strips — compact computing band g–k.
+  // Summer-only strips — full computing band e–k (×1/×1 silk + g–k inputs),
+  // one 2×6 box per amp (not a shared e–f band over three strips).
   for (const block of SUMMER_ONLY_BLOCKS) {
     const [c0, c1] = block.cols
-    boxes.push(sectionBox(c0, c1, 'g', 'k'))
+    boxes.push(sectionBox(c0, c1, 'e', 'k'))
   }
 
   // Funktionsgeber columns a–d.

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createNode } from '../engine/elements'
 import { loadHarmonicOscillator } from '../presets/harmonicOscillator'
+import { loadLorenzAttractor } from '../presets/lorenzAttractor'
 import { loadVehicleSuspension } from '../presets/vehicleSuspension'
 import {
   ampInputPlan,
   ampStrip,
   AMP_STRIPS,
+  assignCableEndpoints,
   COMPARATOR_BLOCKS,
   FREE_DIODE_BLOCKS,
   MULTIPLIER_BANKS,
@@ -78,9 +80,10 @@ describe('patch layout', () => {
     const int1Out = findPortCell(cells, { nodeId: 'int_1', port: 'out' })
     const potIn = findPortCell(cells, { nodeId: 'pot_1', port: 'in' })
     const refP = findPortCell(cells, { nodeId: 'ref_p10', port: 'out' })
-    // Amp outs live on the right-column mult band (white e–f / orange g–k).
+    // Amp outs live on the right-column orange mult band (g–k).
     expect(int1Out?.ref?.port).toBe('out')
-    expect(['white', 'orange', 'red']).toContain(int1Out?.color)
+    expect(int1Out?.color).toBe('orange')
+    expect(rowLetter(int1Out!.row)).toBe('g')
     expect(potIn?.color).toBe('green')
     // +10 V reference surfaces on the +ME metering jacks (red per manual).
     expect(refP?.color).toBe('red')
@@ -89,6 +92,18 @@ describe('patch layout', () => {
       expect(findPortCell(cells, cable.from)).toBeTruthy()
       expect(findPortCell(cells, cable.to)).toBeTruthy()
     }
+  })
+
+  it('spreads paralleled amp-out cables across g–k jacks', () => {
+    const m = loadLorenzAttractor()
+    const cells = buildPatchLayout(m.nodes)
+    const fromX = m.cables.filter(
+      (c) => c.from.nodeId === 'lorenz_x' && c.from.port === 'out',
+    )
+    expect(fromX.length).toBe(4)
+    const ends = assignCableEndpoints(cells, fromX)
+    const rows = ends.map((e) => rowLetter(e.from.row))
+    expect(rows).toEqual(['g', 'h', 'i', 'k'])
   })
 
   it('keeps left-column inputs independent from right-column output mults', () => {
@@ -105,17 +120,20 @@ describe('patch layout', () => {
     )
     expect(eLeft).toBeTruthy()
     expect(eLeft!.ref?.port).toBe('in0')
+    // e2 is the ×10 capacitor jack — not an amp out.
     const eRight = cells.find(
-      (c) =>
-        c.ampNumber === 1 &&
-        c.col === 1 &&
-        c.row === 4 &&
-        c.color === 'white' &&
-        c.ref,
+      (c) => c.ampNumber === 1 && c.col === 1 && c.row === 4,
     )
-    expect(eRight).toBeTruthy()
-    expect(eRight!.ref?.port).toBe('out')
-    expect(eRight!.ref).not.toEqual(eLeft!.ref)
+    expect(eRight?.color).toBe('white')
+    expect(eRight?.ref).toBeUndefined()
+
+    // f2 is IC (A) on Σ/∫ integrator strips.
+    const fRight = cells.find(
+      (c) => c.ampNumber === 1 && c.col === 1 && c.row === 5,
+    )
+    expect(fRight?.color).toBe('white')
+    expect(fRight?.ref?.port).toBe('ic')
+    expect(fRight?.mark).toBe('A')
 
     const gLeft = cells.find(
       (c) =>
@@ -137,6 +155,19 @@ describe('patch layout', () => {
     expect(gRight).toBeTruthy()
     expect(gRight!.ref?.port).toBe('out')
     expect(gRight!.ref).not.toEqual(gLeft!.ref)
+  })
+
+  it('occupies d1–d2 for time×1 and d2–e2 for time×10', () => {
+    const block = SWITCHABLE_BLOCKS[0]!
+    const [left, right] = block.cols
+    expect(jumperOccupiedJacks('time2', '1', left, right)).toEqual([
+      { col1: left, row: rowIndex('d') },
+      { col1: right, row: rowIndex('d') },
+    ])
+    expect(jumperOccupiedJacks('time2', '10', left, right)).toEqual([
+      { col1: right, row: rowIndex('d') },
+      { col1: right, row: rowIndex('e') },
+    ])
   })
 
   it('paints rows e–f as green|white across every amp strip', () => {
@@ -359,5 +390,22 @@ describe('patch layout', () => {
       )
       expect(offenders).toEqual([])
     }
+  })
+
+  it('places museum capacitor/A silk on switchable Σ/∫ strips', () => {
+    const cells = buildPatchLayout(loadHarmonicOscillator().nodes)
+    // Amp 01 = cols 1–2: d1/d2 have no per-jack 1/10 marks.
+    const d1 = cells.find((c) => c.col === 0 && c.row === rowIndex('d'))
+    const d2 = cells.find((c) => c.col === 1 && c.row === rowIndex('d'))
+    expect(d1?.mark).toBeUndefined()
+    expect(d2?.mark).toBeUndefined()
+    // f2 carries the A silk mark + IC port; outs start at g2.
+    const f2 = cells.find((c) => c.col === 1 && c.row === rowIndex('f'))
+    expect(f2?.mark).toBe('A')
+    expect(f2?.ref?.port).toBe('ic')
+    const outs = cells.filter(
+      (c) => c.col === 1 && c.ref?.nodeId === 'int_1' && c.ref.port === 'out',
+    )
+    expect(outs.map((c) => rowLetter(c.row)).sort()).toEqual(['g', 'h', 'i', 'k'])
   })
 })

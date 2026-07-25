@@ -73,4 +73,21 @@ describe('lorenz attractor preset', () => {
     expect(LORENZ_SCOPE_CHANNELS[0]?.xNode).toBe('lorenz_x')
     expect(LORENZ_SCOPE_CHANNELS[0]?.yNode).toBe('lorenz_z')
   })
+
+  it('sets ∫ + time×10 jumpers on the three integrator amp slots', () => {
+    const snap = lorenzAttractorSnapshot()
+    for (const slot of [0, 1, 4]) {
+      const mode = snap.jumpers?.find(
+        (j) => j.ampSlot === slot && j.kind === 'mode4',
+      )
+      const time = snap.jumpers?.find(
+        (j) => j.ampSlot === slot && j.kind === 'time2',
+      )
+      expect(mode?.position).toBe('integral')
+      expect(time?.position).toBe('10')
+    }
+    expect(snap.nodes.find((n) => n.id === 'lorenz_x')?.ampSlot).toBe(0)
+    expect(snap.nodes.find((n) => n.id === 'lorenz_y')?.ampSlot).toBe(1)
+    expect(snap.nodes.find((n) => n.id === 'lorenz_z')?.ampSlot).toBe(4)
+  })
 })

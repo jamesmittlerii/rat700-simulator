@@ -307,12 +307,12 @@ export function timeJumperSites(ampSlot: number): {
 }[] {
   const block = SWITCHABLE_BLOCKS.find((b) => b.ampSlot === ampSlot)
   if (!block) return []
-  const col = block.cols[0]
-  // Both capacitor plugs sit on row d (horizontal left↔right). Distinct from
-  // the mode 4-pin on a–b / b–c, so ∫ + time never share a jack.
+  const [left, right] = block.cols
+  // Museum silk: '1' = horizontal d1–d2; '10' = vertical d2–e2.
+  // Distinct from the mode 4-pin on a–b / b–c.
   return [
-    { position: '1', col, rows: ['d', 'd'] },
-    { position: '10', col, rows: ['d', 'd'] },
+    { position: '1', col: left, rows: ['d', 'd'] },
+    { position: '10', col: right, rows: ['d', 'e'] },
   ]
 }
 

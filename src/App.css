@@ -759,7 +759,9 @@
 }
 
 .fp-amp-strip-label,
-.fp-mode-silk-label {
+.fp-mode-silk-label,
+.fp-cap-silk-1,
+.fp-cap-silk-10 {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -776,6 +778,19 @@
   color: #0a0a0a;
   letter-spacing: -0.02em;
   text-shadow: 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.fp-cap-silk-1 {
+  /* Museum silk sits above the gap between d1 and d2 */
+  align-items: flex-start;
+  transform: translateY(-0.35em);
+}
+
+.fp-cap-silk-10 {
+  /* Sit on the right edge between d2 and e2 */
+  justify-content: flex-end;
+  padding-right: 1px;
+  align-items: center;
 }
 
 .fp-amp-strip-label {
