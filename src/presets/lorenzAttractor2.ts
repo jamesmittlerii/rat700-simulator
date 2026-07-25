@@ -1,11 +1,12 @@
 import { createNode } from '../engine/elements'
 import { fromSnapshot } from '../engine/circuit'
-import { defaultJumpers, upsertJumper } from '../engine/jumpers'
-import type { CircuitNode, JumperPlacement } from '../engine/types'
+import type { CircuitNode } from '../engine/types'
 import {
+  LORENZ_PARAMS,
   baseSnapshot,
   cable as c,
   integratorNode,
+  patchJumpers,
   potK1,
   potK10,
   referenceNodes,
@@ -38,11 +39,7 @@ import {
  */
 
 const S = 10
-const SIGMA = 10
-const RHO = 28
-const BETA = 8 / 3
-const TF = 10
-
+const { sigma: SIGMA, rho: RHO, beta: BETA, tf: TF } = LORENZ_PARAMS
 const IC = 1 / S
 
 export function lorenzAttractor2Snapshot() {
@@ -115,23 +112,10 @@ export function lorenzAttractor2Snapshot() {
     c(18, 'pot_beta', 'out', 'lorenz2_z', 'in0'),
   ]
 
-  let jumpers: JumperPlacement[] = defaultJumpers()
-  for (const slot of [0, 1, 4]) {
-    jumpers = upsertJumper(jumpers, {
-      id: `jmode_${slot}`,
-      kind: 'mode4',
-      ampSlot: slot,
-      position: 'integral',
-    })
-    jumpers = upsertJumper(jumpers, {
-      id: `jtime_${slot}`,
-      kind: 'time2',
-      ampSlot: slot,
-      position: '10',
-    })
-  }
-
-  return baseSnapshot(nodes, cables, { jumpers })
+  const slots = [0, 1, 4] as const
+  return baseSnapshot(nodes, cables, {
+    jumpers: patchJumpers({ integralSlots: slots, time10Slots: slots }),
+  })
 }
 
 export function loadLorenzAttractor2() {

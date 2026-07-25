@@ -256,12 +256,9 @@ function placeAmpStripSilk(
     )
     const rightMark =
       strip.switchable && row === rowIndex('f') ? 'A' : undefined
-    const rightLabel =
-      strip.switchable && row === rowIndex('e')
-        ? `${tag} C×10`
-        : strip.switchable && row === rowIndex('f')
-          ? `${tag} A`
-          : `${tag} silk`
+    let rightLabel = `${tag} silk`
+    if (strip.switchable && row === rowIndex('e')) rightLabel = `${tag} C×10`
+    else if (strip.switchable && row === rowIndex('f')) rightLabel = `${tag} A`
     place(
       cell(rightCol, row, 'white', rightLabel, undefined, undefined, {
         ampNumber: strip.amp,

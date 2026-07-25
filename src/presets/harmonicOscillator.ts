@@ -1,11 +1,10 @@
 import { createNode } from '../engine/elements'
 import { fromSnapshot } from '../engine/circuit'
-import { defaultJumpers, upsertJumper } from '../engine/jumpers'
-import type { JumperPlacement } from '../engine/types'
 import {
   baseSnapshot,
   cable as c,
   integratorNode,
+  patchJumpers,
   referenceNodes,
 } from './helpers'
 
@@ -41,23 +40,10 @@ export function harmonicOscillatorSnapshot() {
     c(4, 'pot_1', 'out', 'int_2', 'in0'),
   ]
 
-  let jumpers: JumperPlacement[] = defaultJumpers()
-  for (const slot of [0, 1]) {
-    jumpers = upsertJumper(jumpers, {
-      id: `jmode_${slot}`,
-      kind: 'mode4',
-      ampSlot: slot,
-      position: 'integral',
-    })
-    jumpers = upsertJumper(jumpers, {
-      id: `jtime_${slot}`,
-      kind: 'time2',
-      ampSlot: slot,
-      position: '1',
-    })
-  }
-
-  return baseSnapshot(nodes, cables, { jumpers })
+  const slots = [0, 1] as const
+  return baseSnapshot(nodes, cables, {
+    jumpers: patchJumpers({ integralSlots: slots, time1Slots: slots }),
+  })
 }
 
 export function loadHarmonicOscillator() {

@@ -100,7 +100,7 @@ describe('patch layout', () => {
     const fromX = m.cables.filter(
       (c) => c.from.nodeId === 'lorenz_x' && c.from.port === 'out',
     )
-    expect(fromX.length).toBe(4)
+    expect(fromX).toHaveLength(4)
     const ends = assignCableEndpoints(cells, fromX)
     const rows = ends.map((e) => rowLetter(e.from.row))
     expect(rows).toEqual(['g', 'h', 'i', 'k'])

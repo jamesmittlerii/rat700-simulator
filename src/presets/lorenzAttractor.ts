@@ -1,11 +1,12 @@
 import { createNode } from '../engine/elements'
 import { fromSnapshot } from '../engine/circuit'
-import { defaultJumpers, upsertJumper } from '../engine/jumpers'
-import type { CircuitNode, JumperPlacement } from '../engine/types'
+import type { CircuitNode } from '../engine/types'
 import {
+  LORENZ_PARAMS,
   baseSnapshot,
   cable as c,
   integratorNode,
+  patchJumpers,
   potK1,
   potK10,
   potKMul10,
@@ -47,12 +48,7 @@ import {
 const SX = 2.5
 const SY = 3.5
 const SZ = 6
-
-const SIGMA = 10
-const RHO = 28
-const BETA = 8 / 3
-/** Common integrator time factor used to realise the large coefficients. */
-const TF = 10
+const { sigma: SIGMA, rho: RHO, beta: BETA, tf: TF } = LORENZ_PARAMS
 
 /** Classic initial condition (x, y, z) = (1, 1, 1), in scaled volts. */
 const IC_X = 1 / SX
@@ -139,23 +135,10 @@ export function lorenzAttractorSnapshot() {
     c(20, 'pot_zdamp', 'out', 'lorenz_z', 'in0'),
   ]
 
-  let jumpers: JumperPlacement[] = defaultJumpers()
-  for (const slot of [0, 1, 4]) {
-    jumpers = upsertJumper(jumpers, {
-      id: `jmode_${slot}`,
-      kind: 'mode4',
-      ampSlot: slot,
-      position: 'integral',
-    })
-    jumpers = upsertJumper(jumpers, {
-      id: `jtime_${slot}`,
-      kind: 'time2',
-      ampSlot: slot,
-      position: '10',
-    })
-  }
-
-  return baseSnapshot(nodes, cables, { jumpers })
+  const slots = [0, 1, 4] as const
+  return baseSnapshot(nodes, cables, {
+    jumpers: patchJumpers({ integralSlots: slots, time10Slots: slots }),
+  })
 }
 
 export function loadLorenzAttractor() {

@@ -164,8 +164,8 @@ describe('silk ties', () => {
     expect(
       boxes.filter(
         (b) => b.y === rowIndex('e') && b.h === 6 && b.w === 2,
-      ).length,
-    ).toBe(SUMMER_ONLY_BLOCKS.length)
+      ),
+    ).toHaveLength(SUMMER_ONLY_BLOCKS.length)
     // Bottom-left ME + AS + verfügbar.
     expect(boxes.some((b) => b.x === 1 && b.w === 3 && b.y === 12 && b.h === 2)).toBe(
       true,

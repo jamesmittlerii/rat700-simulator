@@ -4,7 +4,58 @@
  */
 
 import { createNode } from '../engine/elements'
-import type { Cable, CircuitNode, CircuitSnapshot } from '../engine/types'
+import { defaultJumpers, upsertJumper } from '../engine/jumpers'
+import type {
+  Cable,
+  CircuitNode,
+  CircuitSnapshot,
+  JumperPlacement,
+} from '../engine/types'
+
+/** Classic Lorenz parameters shared by both faceplate patches. */
+export const LORENZ_PARAMS = {
+  sigma: 10,
+  rho: 28,
+  beta: 8 / 3,
+  tf: 10,
+} as const
+
+/**
+ * Start from default Σ / time×1 jumpers, then mark selected slots as ∫ and
+ * optionally override capacitor plugs to time×10 or time×1.
+ */
+export function patchJumpers(opts: {
+  integralSlots: readonly number[]
+  time10Slots?: readonly number[]
+  time1Slots?: readonly number[]
+}): JumperPlacement[] {
+  let jumpers = defaultJumpers()
+  for (const slot of opts.integralSlots) {
+    jumpers = upsertJumper(jumpers, {
+      id: `jmode_${slot}`,
+      kind: 'mode4',
+      ampSlot: slot,
+      position: 'integral',
+    })
+  }
+  for (const slot of opts.time10Slots ?? []) {
+    jumpers = upsertJumper(jumpers, {
+      id: `jtime_${slot}`,
+      kind: 'time2',
+      ampSlot: slot,
+      position: '10',
+    })
+  }
+  for (const slot of opts.time1Slots ?? []) {
+    jumpers = upsertJumper(jumpers, {
+      id: `jtime_${slot}`,
+      kind: 'time2',
+      ampSlot: slot,
+      position: '1',
+    })
+  }
+  return jumpers
+}
 
 /** Numbered cable used by schematic presets. */
 export function cable(

@@ -1,11 +1,11 @@
 import { createNode } from '../engine/elements'
 import { CAR_BODY_BREAKPOINTS } from '../engine/functionGenerator'
 import { fromSnapshot } from '../engine/circuit'
-import { defaultJumpers, upsertJumper } from '../engine/jumpers'
-import type { Cable, CircuitNode, JumperPlacement } from '../engine/types'
+import type { Cable, CircuitNode } from '../engine/types'
 import {
   baseSnapshot,
   cable as c,
+  patchJumpers,
   referenceNodes,
 } from './helpers'
 
@@ -185,26 +185,14 @@ export function vehicleSuspensionSnapshot(damping: SuspensionDamping = 'firm') {
     c(35, 'int_cos', 'out', 'fg_1', 'in'),
   ]
 
-  let jumpers: JumperPlacement[] = defaultJumpers()
-  for (const slot of [0, 1, 4, 5, 9, 10]) {
-    jumpers = upsertJumper(jumpers, {
-      id: `jmode_${slot}`,
-      kind: 'mode4',
-      ampSlot: slot,
-      position: 'integral',
-    })
-  }
   // Physics chain on ×10 caps (slots 0,1,4,5); drawing HO stays ×1.
-  for (const slot of [0, 1, 4, 5]) {
-    jumpers = upsertJumper(jumpers, {
-      id: `jtime_${slot}`,
-      kind: 'time2',
-      ampSlot: slot,
-      position: '10',
-    })
-  }
-
-  return baseSnapshot(nodes, cables, { timeScale: 1, jumpers })
+  return baseSnapshot(nodes, cables, {
+    timeScale: 1,
+    jumpers: patchJumpers({
+      integralSlots: [0, 1, 4, 5, 9, 10],
+      time10Slots: [0, 1, 4, 5],
+    }),
+  })
 }
 
 export function loadVehicleSuspension(damping: SuspensionDamping = 'firm') {
